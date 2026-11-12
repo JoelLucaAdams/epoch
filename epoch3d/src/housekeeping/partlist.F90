@@ -1053,6 +1053,11 @@ CONTAINS
     ELSE
       p = SQRT(part%part_p(1)**2 + part%part_p(2)**2 + part%part_p(3)**2)
     END IF
+
+    ! Particles have the possibility of having an underflow value smaller
+    ! than c_tiny and calculating 1/p returns a NaN which segfaults the code.
+    ! Since its momentum is not contributing any feasible amount, we drop it
+    IF (p < c_tiny) RETURN
     frac_p = 1.0_num / p
 
     ! Precalculate repeated terms
