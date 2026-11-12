@@ -609,7 +609,7 @@ CONTAINS
 
     REAL(num), INTENT(IN) :: intensity, omega
     INTEGER, INTENT(IN) :: model
-    REAL(num) :: get_mean_energy, wavelength
+    REAL(num) :: get_mean_energy, wavelength, a0_sq
 
     IF (model == c_mean_a0) THEN
       ! KE = a0*m*c²
@@ -617,9 +617,10 @@ CONTAINS
     ELSE IF (model == c_mean_wilks) THEN
       ! Wilks scaling: KE = m*c²(SQRT(1 + I*lambda²/(1.37e18W/cm²*um²))-1)
       ! Wilks, S.C. et al (1992). Phys. Rev. Lett., 69(9), 1383.
+      ! Written as x/(SQRT(1+x)+1) to avoid cancellation at low intensity
       wavelength = 2.0_num * pi * c / omega
-      get_mean_energy = m0c2 &
-          * (SQRT(1.0_num + intensity*wavelength**2/1.37e10_num) - 1.0_num)
+      a0_sq = intensity*wavelength**2/1.37e10_num
+      get_mean_energy = m0c2 * a0_sq / (SQRT(1.0_num + a0_sq) + 1.0_num)
     END IF
 
   END FUNCTION get_mean_energy
@@ -659,7 +660,9 @@ CONTAINS
 
     END IF
 
-    sample_p_mag = SQRT((sample_KE+m0c2)**2 - m0c2**2)/c
+    ! Equivalent to SQRT((KE+m0c2)**2 - m0c2**2)/c, but avoids the cancellation
+    ! which gives zero momentum when KE << m0c2 (e.g. in steep profile wings)
+    sample_p_mag = SQRT(sample_KE * (sample_KE + 2.0_num*m0c2))/c
 
   END FUNCTION sample_p_mag
 
