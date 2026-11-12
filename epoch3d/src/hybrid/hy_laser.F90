@@ -470,7 +470,7 @@ CONTAINS
         ! Don't inject low weight particles
         parameters%use_grid_position = .TRUE.
         space_frac = MAX(laser%profile(icell,jcell), 0.0_num)
-        IF (space_frac < laser%profile_min) CYCLE
+        IF (space_frac < laser%profile_min .OR. space_frac < c_tiny) CYCLE
 
         ! Add perpendicular displacements of current cell to cur_cell
         cur_cell = 0.0_num
@@ -488,6 +488,10 @@ CONTAINS
           intens_cell = laser%intensity * space_frac * time_frac
           mean_energy = get_mean_energy(intens_cell, laser%omega, laser%mean)
         END IF
+
+        ! Skip cells where the mean energy underflows (e.g. in the far wings of
+        ! steep profiles), as these give zero momentum and infinite weight
+        IF (mean_energy < c_tiny) CYCLE
 
         ! Corresponding number of real particles
         IF (laser%e_dist == e_dist_mono_weight) THEN
