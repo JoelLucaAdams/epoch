@@ -730,6 +730,7 @@ MODULE shared_data
     REAL(num), ALLOCATABLE :: te_table(:)     ! electron temperature axis [eV]
     REAL(num), ALLOCATABLE :: ti_table(:)     ! ion temperature axis [eV]
     REAL(num), ALLOCATABLE :: eta_table(:,:,:) ! resistivity [Ohm.m] (rho,te,ti)
+    LOGICAL :: log_interp_table = .FALSE.     ! interpolate in log10 (VTI)
 
     ! Derived variables
     REAL(num) :: theta_fac, ln_s, z_prime

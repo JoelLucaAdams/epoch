@@ -26,6 +26,7 @@ MODULE hy_resistivity
 #ifdef HYBRID
 
   USE hy_shared
+  USE vti_reader
 
   IMPLICIT NONE
 
@@ -200,7 +201,8 @@ CONTAINS
   SUBROUTINE setup_resistivity_tables
 
     ! Reads each solid's resistivity table from disk (rank 0 only) then
-    ! broadcasts the data to all MPI ranks.
+    ! broadcasts the data to all MPI ranks. Files ending in .vti are loaded
+    ! by setup_resistivity_table_vti, any other file is read as plain ASCII.
     !
     ! File format (plain ASCII):
     !   Line 1: n_rho n_te n_ti
@@ -217,6 +219,11 @@ CONTAINS
 
     DO isolid = 1, solid_count
       IF (solid_array(isolid)%res_model /= c_resist_table) CYCLE
+
+      IF (is_vti_file(solid_array(isolid)%resistivity_table_location)) THEN
+        CALL setup_resistivity_table_vti(isolid)
+        CYCLE
+      END IF
 
       IF (rank == 0) THEN
         OPEN(unit=lu, &
@@ -267,18 +274,55 @@ CONTAINS
 
 
 
+  SUBROUTINE setup_resistivity_table_vti(isolid)
+
+    ! Loads the resistivity table for solid isolid from a VTI file, using the
+    ! FieldData arrays MassDensity [kg/m^3], ElectronTemperature [K] and
+    ! IonTemperature [K] as the axes of the PointData array
+    ! ElectricalResistivity [Ohm.m]. These tables are interpolated in log10.
+
+    INTEGER, INTENT(IN) :: isolid
+    TYPE(vti_file) :: vti
+    CHARACTER(LEN=string_length) :: filename
+    INTEGER :: i_eta
+
+    filename = solid_array(isolid)%resistivity_table_location
+    CALL load_vti_file(filename, vti)
+
+    CALL get_vti_axis(filename, vti, 'MassDensity', 1, &
+        solid_array(isolid)%rho_table)
+    CALL get_vti_axis(filename, vti, 'ElectronTemperature', 2, &
+        solid_array(isolid)%te_table)
+    CALL get_vti_axis(filename, vti, 'IonTemperature', 3, &
+        solid_array(isolid)%ti_table)
+
+    i_eta = find_vti_data_array_index(filename, vti%point_data, &
+      'ElectricalResistivity')
+    ALLOCATE(solid_array(isolid)%eta_table(SIZE(vti%tables, 1), &
+        SIZE(vti%tables, 2), SIZE(vti%tables, 3)))
+    solid_array(isolid)%eta_table = vti%tables(:,:,:,i_eta)
+    solid_array(isolid)%log_interp_table = .TRUE.
+
+  END SUBROUTINE setup_resistivity_table_vti
+
+
+
   FUNCTION calc_resistivity_table(ix, iy, iz)
 
     ! Calculates resistivity using trilinear interpolation on the table loaded
     ! for the dominant solid at this cell. The dominant solid index is stored in
     ! solid_index_model, set once at initialisation alongside resistivity_model,
-    ! using the same highest-electron-density criterion.
+    ! using the same highest-electron-density criterion. Tables loaded from VTI
+    ! files are interpolated in log10, other tables are interpolated linearly.
 
     INTEGER, INTENT(IN) :: ix, iy, iz
     REAL(num) :: calc_resistivity_table
 
     INTEGER :: i_sol
     REAL(num) :: rho_mass, te, ti
+    CHARACTER(LEN=*), PARAMETER :: axis_labels(3) = &
+        (/ 'rho [kg/m^3]', 'te [K]      ', 'ti [K]      ' /)
+    LOGICAL, SAVE :: warning(3) = .TRUE.
 
     i_sol = solid_index_model(ix,iy,iz)
     rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
@@ -290,7 +334,15 @@ CONTAINS
       ti = te
     END IF
 
-    calc_resistivity_table = interp_trilinear(rho_mass, te, ti, i_sol)
+    IF (solid_array(i_sol)%log_interp_table) THEN
+      calc_resistivity_table = interp_trilinear_log( &
+          solid_array(i_sol)%resistivity_table_location, &
+          solid_array(i_sol)%eta_table, solid_array(i_sol)%rho_table, &
+          solid_array(i_sol)%te_table, solid_array(i_sol)%ti_table, &
+          (/ rho_mass, te, ti /), .TRUE., axis_labels, warning)
+    ELSE
+      calc_resistivity_table = interp_trilinear(rho_mass, te, ti, i_sol)
+    END IF
 
   END FUNCTION calc_resistivity_table
 
