@@ -662,7 +662,7 @@ CONTAINS
     IF (SIZE(x_axis) /= SIZE(table, 1) .OR. SIZE(y_axis) /= SIZE(table, 2) &
         .OR. SIZE(z_axis) /= SIZE(table, 3)) THEN
       PRINT*, '*** ERROR ***'
-      PRINT*, 'Axis lengths do not match the VTI table "', TRIM(filename) '"'
+      PRINT*, 'Axis lengths do not match the VTI table "', TRIM(filename), '"'
       CALL abort_code(c_err_bad_array_length)
     END IF
 
