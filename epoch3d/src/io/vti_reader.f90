@@ -637,8 +637,8 @@ CONTAINS
           IF (log_values) THEN
             IF (corner <= 0.0_num) THEN
               PRINT*, '*** ERROR ***'
-              PRINT*, 'Unable to take the log of VTI table "', filename, &
-                '" as it has a value <= 0'
+              PRINT*, 'Unable to take the log of VTI table "', TRIM(filename), &
+                  '" as it has a value <= 0'
               CALL abort_code(c_err_bad_value)
             END IF
             corner = LOG10(corner)
