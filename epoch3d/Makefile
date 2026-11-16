@@ -332,8 +332,8 @@ SRCFILES = background_collisions.F90 balance.F90 bethe_heitler.F90 \
   recombination.F90 redblack_module.f90 setup.F90 shape_functions.F90 \
   shared_data.F90 shunt.F90 simple_io.F90 split_particle.F90 stack.f90 \
   strings.f90 strings_advanced.f90 terminal_controls.F90 timer.f90 \
-  tokenizer_blocks.f90 utilities.f90 version_data.F90 welcome.F90 \
-  window.F90
+  tokenizer_blocks.f90 utilities.f90 version_data.F90 vti_reader.f90 \
+  welcome.F90 window.F90
 
 OBJFILES := $(SRCFILES:.f90=.o)
 OBJFILES := $(OBJFILES:.F90=.o)
@@ -535,7 +535,7 @@ hy_heating.o: hy_heating.F90 hy_shared.o
 hy_ionisation_loss.o: hy_ionisation_loss.F90 hy_heating.o hy_shared.o \
 	particles.o partlist.o calc_df.o
 hy_laser.o: hy_laser.F90 evaluate.o particles.o partlist.o
-hy_resistivity.o: hy_resistivity.F90 hy_shared.o
+hy_resistivity.o: hy_resistivity.F90 hy_shared.o vti_reader.o
 hy_shared.o: hy_shared.F90 boundary.o shared_data.o
 hybrid.o: hybrid.F90 balance.o bremsstrahlung.o boundary.o current_smooth.o \
 	diagnostics.o hy_elastic.o hy_fields.o hy_heating.o hy_ionisation_loss.o \
@@ -582,5 +582,6 @@ timer.o: timer.f90 constants.o
 tokenizer_blocks.o: tokenizer_blocks.f90 strings.o
 utilities.o: utilities.f90 constants.o shared_data.o
 version_data.o: version_data.F90 $(SRCDIR)/COMMIT
+vti_reader.o: vti_reader.f90 shared_data.o utilities.o
 welcome.o: welcome.F90 shared_data.o terminal_controls.o version_data.o
 window.o: window.F90 boundary.o evaluate.o partlist.o
