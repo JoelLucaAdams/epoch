@@ -727,8 +727,8 @@ MODULE shared_data
 
     ! Resistivity lookup table (loaded from resistivity_table_location)
     REAL(num), ALLOCATABLE :: rho_table(:)    ! mass density axis [kg/m^3]
-    REAL(num), ALLOCATABLE :: te_table(:)     ! electron temperature axis [eV]
-    REAL(num), ALLOCATABLE :: ti_table(:)     ! ion temperature axis [eV]
+    REAL(num), ALLOCATABLE :: te_table(:)     ! electron temperature axis [K]
+    REAL(num), ALLOCATABLE :: ti_table(:)     ! ion temperature axis [K]
     REAL(num), ALLOCATABLE :: eta_table(:,:,:) ! resistivity [Ohm.m] (rho,te,ti)
     LOGICAL :: log_interp_table = .FALSE.     ! interpolate in log10 (VTI)
     LOGICAL :: table_warning(3) = .TRUE.      ! warn once per axis if clamped
