@@ -340,7 +340,8 @@ CONTAINS
           solid_array(i_sol)%eta_table, solid_array(i_sol)%rho_table, &
           solid_array(i_sol)%te_table, solid_array(i_sol)%ti_table, &
           (/ rho_mass, te, ti /), .TRUE., axis_labels, &
-          solid_array(i_sol)%table_warning)
+          solid_array(i_sol)%table_warning, &
+          solid_array(i_sol)%table_last_index)
     ELSE
       calc_resistivity_table = interp_trilinear(rho_mass, te, ti, i_sol)
     END IF

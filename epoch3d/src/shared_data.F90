@@ -732,6 +732,7 @@ MODULE shared_data
     REAL(num), ALLOCATABLE :: eta_table(:,:,:) ! resistivity [Ohm.m] (rho,te,ti)
     LOGICAL :: log_interp_table = .FALSE.     ! interpolate in log10 (VTI)
     LOGICAL :: table_warning(3) = .TRUE.      ! warn once per axis if clamped
+    INTEGER :: table_last_index(3) = 0        ! previous lookup's indices
 
     ! Derived variables
     REAL(num) :: theta_fac, ln_s, z_prime

@@ -508,18 +508,20 @@ CONTAINS
     ! Find where "point" falls along an axis, measured in log10. The axis can
     ! have any spacing as long as it increases. Returns index_below_value, the
     ! index of the point just below (counting from 0), and fraction_along_axis,
-    ! how far towards the next point (0 to 1). If warn is true, a point outside
-    ! the axis gives a warning on rank 0, then warn is set false so it is only
-    ! issued once. filename is the VTI file the axis came from.
+    ! how far towards the next point (0 to 1). On entry, index_below_value is
+    ! the result of the previous lookup, which the search starts from. If warn
+    ! is true, a point outside the axis gives a warning on rank 0, then warn is
+    ! set false so it is only issued once. filename is the VTI file the axis
+    ! came from.
 
     CHARACTER(LEN=*), INTENT(IN) :: filename
     REAL(num), INTENT(IN) :: axis(0:)
     REAL(num), INTENT(IN) :: point
     CHARACTER(LEN=*), INTENT(IN) :: axis_label
     LOGICAL, INTENT(INOUT) :: warn
-    INTEGER, INTENT(OUT) :: index_below_value
+    INTEGER, INTENT(INOUT) :: index_below_value
     REAL(num), INTENT(OUT) :: fraction_along_axis
-    INTEGER :: low, high, middle, io, iu
+    INTEGER :: low, high, middle, step, last_point, io, iu
     REAL(num) :: clamped
 
     IF (SIZE(axis) == 1) THEN ! a flat axis, such as z in a 2D table
@@ -556,9 +558,32 @@ CONTAINS
     ! Clamp to the table's edges
     clamped = MIN(MAX(point, axis(0)), axis(SIZE(axis) - 1))
 
+    ! Hunt outwards from the previous lookup's index, in steps that double in
+    ! size, until the point lies between low and high. Successive lookups are
+    ! usually close together, so this is quicker than searching the whole axis
+    last_point = SIZE(axis) - 1
+    low = MIN(MAX(index_below_value, 0), last_point - 1)
+    step = 1
+    IF (axis(low) <= clamped) THEN
+      ! Hunt forwards
+      high = low + 1
+      DO WHILE (high < last_point .AND. axis(high) <= clamped)
+        low = high
+        high = MIN(high + step, last_point)
+        step = 2 * step
+      END DO
+    ELSE
+      ! Hunt backwards
+      high = low
+      low = MAX(high - step, 0)
+      DO WHILE (axis(low) > clamped)
+        high = low
+        step = 2 * step
+        low = MAX(high - step, 0)
+      END DO
+    END IF
+
     ! Binary search (keep halving the range until it's down to one interval)
-    low = 0
-    high = SIZE(axis) - 1
     DO WHILE (high - low > 1)
       middle = (low + high) / 2
       IF (axis(middle) <= clamped) THEN
@@ -582,13 +607,15 @@ CONTAINS
 
 
   FUNCTION interp_trilinear_log(filename, table, x_axis, y_axis, z_axis, &
-      point, log_values, axis_labels, warn) RESULT(value)
+      point, log_values, axis_labels, warn, last_index) RESULT(value)
 
     ! Interpolate a table along its axes in log10. With log_values, the values
     ! are interpolated in log10 too (log-log), which is exact for power laws.
     ! filename is the VTI file the table came from, axis_labels name each axis
     ! in warnings, and warn holds whether each axis can still give its
-    ! one-time out of range warning (see locate_log).
+    ! one-time out of range warning. last_index holds the index found on each
+    ! axis by the previous lookup, which the next lookup starts searching from
+    ! (see locate_log). Start it at 0 and keep one per table.
 
     CHARACTER(LEN=*), INTENT(IN) :: filename
     REAL(num), INTENT(IN) :: table(0:,0:,0:) ! indexed from 0 in here
@@ -596,8 +623,9 @@ CONTAINS
     LOGICAL, INTENT(IN) :: log_values
     CHARACTER(LEN=*), INTENT(IN) :: axis_labels(3)
     LOGICAL, INTENT(INOUT) :: warn(3)
+    INTEGER, INTENT(INOUT) :: last_index(3)
     REAL(num) :: value
-    INTEGER :: i, j, k, dimension_index, index_below_value, last(3)
+    INTEGER :: i, j, k, dimension_index, last(3)
     INTEGER :: idx(0:1,3)
     REAL(num) :: fraction_along_axis, weights(0:1,3), corner
 
@@ -613,15 +641,16 @@ CONTAINS
       SELECT CASE (dimension_index)
       CASE (1)
         CALL locate_log(filename, x_axis, point(1), axis_labels(1), &
-            warn(1), index_below_value, fraction_along_axis)
+            warn(1), last_index(1), fraction_along_axis)
       CASE (2)
         CALL locate_log(filename, y_axis, point(2), axis_labels(2), &
-            warn(2), index_below_value, fraction_along_axis)
+            warn(2), last_index(2), fraction_along_axis)
       CASE (3)
         CALL locate_log(filename, z_axis, point(3), axis_labels(3), &
-            warn(3), index_below_value, fraction_along_axis)
+            warn(3), last_index(3), fraction_along_axis)
       END SELECT
-      idx(:,dimension_index) = (/ index_below_value, index_below_value + 1 /)
+      idx(:,dimension_index) = &
+          (/ last_index(dimension_index), last_index(dimension_index) + 1 /)
       weights(:,dimension_index) = &
           (/ 1.0_num - fraction_along_axis, fraction_along_axis /)
       ! Flat axes only use one point
