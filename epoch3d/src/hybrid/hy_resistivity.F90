@@ -314,6 +314,7 @@ CONTAINS
     ! solid_index_model, set once at initialisation alongside resistivity_model,
     ! using the same highest-electron-density criterion. Tables loaded from VTI
     ! files are interpolated in log10, other tables are interpolated linearly.
+    ! VTI out of range warnings are given once per axis for each solid.
 
     INTEGER, INTENT(IN) :: ix, iy, iz
     REAL(num) :: calc_resistivity_table
@@ -322,7 +323,6 @@ CONTAINS
     REAL(num) :: rho_mass, te, ti
     CHARACTER(LEN=*), PARAMETER :: axis_labels(3) = &
         (/ 'rho [kg/m^3]', 'te [K]      ', 'ti [K]      ' /)
-    LOGICAL, SAVE :: warning(3) = .TRUE.
 
     i_sol = solid_index_model(ix,iy,iz)
     rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
@@ -339,7 +339,8 @@ CONTAINS
           solid_array(i_sol)%resistivity_table_location, &
           solid_array(i_sol)%eta_table, solid_array(i_sol)%rho_table, &
           solid_array(i_sol)%te_table, solid_array(i_sol)%ti_table, &
-          (/ rho_mass, te, ti /), .TRUE., axis_labels, warning)
+          (/ rho_mass, te, ti /), .TRUE., axis_labels, &
+          solid_array(i_sol)%table_warning)
     ELSE
       calc_resistivity_table = interp_trilinear(rho_mass, te, ti, i_sol)
     END IF
