@@ -208,19 +208,7 @@ CONTAINS
     ! Print the FieldData and PointData arrays
     DO iu = 1, nio_units ! Print to stdout and to file
       io = ios_units(iu)
-      WRITE(io,*) 'Loaded VTI file "' // TRIM(filename) // '"'
-      WRITE(io,*) 'Table shape: ', SHAPE(vti%tables)
-      DO i = 1, SIZE(vti%field_data)
-        WRITE(io,*) '  FieldData ', TRIM(vti%field_data(i)%name), &
-            ' range: [', vti%field_data(i)%range_min, ', ', &
-            vti%field_data(i)%range_max, ']'
-      END DO
-      DO i = 1, SIZE(vti%point_data)
-        WRITE(io,*) '  PointData ', TRIM(vti%point_data(i)%name), &
-            ' range: [', vti%point_data(i)%range_min, ', ', &
-            vti%point_data(i)%range_max, ']'
-      END DO
-      WRITE(io,*)
+      WRITE(io,*) 'Loaded lookup table(s) from "' // TRIM(filename) // '"'
     END DO
 
   END SUBROUTINE read_vti_file
