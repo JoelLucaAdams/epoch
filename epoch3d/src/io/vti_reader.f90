@@ -34,6 +34,7 @@ MODULE vti_reader
   PRIVATE
   PUBLIC :: vti_data_array, vti_file
   PUBLIC :: load_vti_file, is_vti_file, find_vti_data_array_index, get_vti_axis
+  PUBLIC :: get_vti_log_table
   PUBLIC :: interp_trilinear_log
 
   TYPE vti_data_array
@@ -342,8 +343,9 @@ CONTAINS
 
   SUBROUTINE get_vti_axis(filename, vti, name, axis_dim, axis)
 
-    ! Copies the FieldData array called name into axis, checking that it can
-    ! be used as dimension axis_dim of the tables when interpolating in log10
+    ! Copies log10 of the FieldData array called name into axis, checking that
+    ! it can be used as dimension axis_dim of the tables when interpolating in
+    ! log10
 
     CHARACTER(LEN=*), INTENT(IN) :: filename, name
     TYPE(vti_file), INTENT(IN) :: vti
@@ -371,7 +373,32 @@ CONTAINS
         CALL vti_error(filename, 'FieldData array "' // name &
             // '" must be increasing')
 
+    axis = LOG10(axis)
+
   END SUBROUTINE get_vti_axis
+
+
+
+  SUBROUTINE get_vti_log_table(filename, vti, name, table)
+
+    ! Copies log10 of the PointData table called name into table, so that it
+    ! can be interpolated by interp_trilinear_log with log_values
+
+    CHARACTER(LEN=*), INTENT(IN) :: filename, name
+    TYPE(vti_file), INTENT(IN) :: vti
+    REAL(num), ALLOCATABLE, INTENT(OUT) :: table(:,:,:)
+    INTEGER :: i
+
+    i = find_vti_data_array_index(filename, vti%point_data, name)
+    IF (ANY(vti%tables(:,:,:,i) <= 0.0_num)) &
+        CALL vti_error(filename, 'PointData array "' // name &
+            // '" must be positive to interpolate in log10')
+
+    ALLOCATE(table(SIZE(vti%tables, 1), SIZE(vti%tables, 2), &
+        SIZE(vti%tables, 3)))
+    table = LOG10(vti%tables(:,:,:,i))
+
+  END SUBROUTINE get_vti_log_table
 
 
 
@@ -505,10 +532,11 @@ CONTAINS
   SUBROUTINE locate_log(filename, axis, point, axis_label, warn, &
       index_below_value, fraction_along_axis)
 
-    ! Find where "point" falls along an axis, measured in log10. The axis can
-    ! have any spacing as long as it increases. Returns index_below_value, the
-    ! index of the point just below (counting from 0), and fraction_along_axis,
-    ! how far towards the next point (0 to 1). On entry, index_below_value is
+    ! Find where "point" falls along an axis, measured in log10. axis holds
+    ! log10 of the axis values (see get_vti_axis), which can have any spacing
+    ! as long as they increase. Returns index_below_value, the index of the
+    ! point just below (counting from 0), and fraction_along_axis, how far
+    ! towards the next point (0 to 1). On entry, index_below_value is
     ! the result of the previous lookup, which the search starts from. If warn
     ! is true, a point outside the axis gives a warning on rank 0, then warn is
     ! set false so it is only issued once. filename is the VTI file the axis
@@ -522,7 +550,7 @@ CONTAINS
     INTEGER, INTENT(INOUT) :: index_below_value
     REAL(num), INTENT(OUT) :: fraction_along_axis
     INTEGER :: low, high, middle, step, last_point, io, iu
-    REAL(num) :: clamped
+    REAL(num) :: log_point, clamped
 
     IF (SIZE(axis) == 1) THEN ! a flat axis, such as z in a 2D table
       index_below_value = 0
@@ -536,9 +564,10 @@ CONTAINS
       PRINT*, 'VTI file: "' // TRIM(filename) // '"'
       CALL abort_code(c_err_bad_value)
     END IF
+    log_point = LOG10(point)
 
     ! Points outside the table get the nearest edge value, with a warning
-    IF (point < axis(0) .OR. point > axis(SIZE(axis) - 1)) THEN
+    IF (log_point < axis(0) .OR. log_point > axis(SIZE(axis) - 1)) THEN
       IF (warn .AND. rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = ios_units(iu)
@@ -546,8 +575,8 @@ CONTAINS
           WRITE(io,*) 'VTI table lookup out of range for axis: ', &
               TRIM(axis_label)
           WRITE(io,*) 'VTI file: "' // TRIM(filename) // '"'
-          WRITE(io,*) 'Value: ', point, ' Table range: [', axis(0), ', ', &
-              axis(SIZE(axis) - 1), ']'
+          WRITE(io,*) 'Value: ', point, ' Table range: [', &
+              10.0_num**axis(0), ', ', 10.0_num**axis(SIZE(axis) - 1), ']'
           WRITE(io,*) 'Using the edge value. No further warnings will be ', &
               'issued for this axis.'
         END DO
@@ -556,7 +585,7 @@ CONTAINS
     END IF
 
     ! Clamp to the table's edges
-    clamped = MIN(MAX(point, axis(0)), axis(SIZE(axis) - 1))
+    clamped = MIN(MAX(log_point, axis(0)), axis(SIZE(axis) - 1))
 
     ! Hunt outwards from the previous lookup's index, in steps that double in
     ! size, until the point lies between low and high. Successive lookups are
@@ -595,8 +624,7 @@ CONTAINS
 
     index_below_value = low
     IF (axis(high) > axis(low)) THEN
-      fraction_along_axis = (LOG10(clamped) - LOG10(axis(low))) &
-          / (LOG10(axis(high)) - LOG10(axis(low)))
+      fraction_along_axis = (clamped - axis(low)) / (axis(high) - axis(low))
     ELSE
       ! Two identical axis values: nothing to interpolate
       fraction_along_axis = 0.0_num
@@ -609,8 +637,10 @@ CONTAINS
   FUNCTION interp_trilinear_log(filename, table, x_axis, y_axis, z_axis, &
       point, log_values, axis_labels, warn, last_index) RESULT(value)
 
-    ! Interpolate a table along its axes in log10. With log_values, the values
-    ! are interpolated in log10 too (log-log), which is exact for power laws.
+    ! Interpolate a table along its axes in log10, where x_axis, y_axis and
+    ! z_axis hold log10 of the axis values (see get_vti_axis). With log_values,
+    ! table holds log10 of the values (see get_vti_log_table) and they are
+    ! interpolated in log10 too (log-log), which is exact for power laws.
     ! filename is the VTI file the table came from, axis_labels name each axis
     ! in warnings, and warn holds whether each axis can still give its
     ! one-time out of range warning. last_index holds the index found on each
@@ -627,12 +657,12 @@ CONTAINS
     REAL(num) :: value
     INTEGER :: i, j, k, dimension_index, last(3)
     INTEGER :: idx(0:1,3)
-    REAL(num) :: fraction_along_axis, weights(0:1,3), corner
+    REAL(num) :: fraction_along_axis, weights(0:1,3)
 
     IF (SIZE(x_axis) /= SIZE(table, 1) .OR. SIZE(y_axis) /= SIZE(table, 2) &
         .OR. SIZE(z_axis) /= SIZE(table, 3)) THEN
       PRINT*, '*** ERROR ***'
-      PRINT*, 'Axis lengths do not match the table in interp_trilinear_log'
+      PRINT*, 'Axis lengths do not match the VTI table "', TRIM(filename) '"'
       CALL abort_code(c_err_bad_array_length)
     END IF
 
@@ -662,17 +692,8 @@ CONTAINS
     DO k = 0, last(3)
       DO j = 0, last(2)
         DO i = 0, last(1)
-          corner = table(idx(i,1), idx(j,2), idx(k,3))
-          IF (log_values) THEN
-            IF (corner <= 0.0_num) THEN
-              PRINT*, '*** ERROR ***'
-              PRINT*, 'Unable to take the log of VTI table "', TRIM(filename), &
-                  '" as it has a value <= 0'
-              CALL abort_code(c_err_bad_value)
-            END IF
-            corner = LOG10(corner)
-          END IF
-          value = value + weights(i,1) * weights(j,2) * weights(k,3) * corner
+          value = value + weights(i,1) * weights(j,2) * weights(k,3) &
+              * table(idx(i,1), idx(j,2), idx(k,3))
         END DO
       END DO
     END DO

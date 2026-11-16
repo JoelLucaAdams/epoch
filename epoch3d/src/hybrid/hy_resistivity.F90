@@ -279,12 +279,12 @@ CONTAINS
     ! Loads the resistivity table for solid isolid from a VTI file, using the
     ! FieldData arrays MassDensity [kg/m^3], ElectronTemperature [K] and
     ! IonTemperature [K] as the axes of the PointData array
-    ! ElectricalResistivity [Ohm.m]. These tables are interpolated in log10.
+    ! ElectricalResistivity [Ohm.m]. The axes and table are stored as log10
+    ! values, ready for interp_trilinear_log.
 
     INTEGER, INTENT(IN) :: isolid
     TYPE(vti_file) :: vti
     CHARACTER(LEN=string_length) :: filename
-    INTEGER :: i_eta
 
     filename = solid_array(isolid)%resistivity_table_location
     CALL load_vti_file(filename, vti)
@@ -296,11 +296,8 @@ CONTAINS
     CALL get_vti_axis(filename, vti, 'IonTemperature', 3, &
         solid_array(isolid)%ti_table)
 
-    i_eta = find_vti_data_array_index(filename, vti%point_data, &
-      'ElectricalResistivity')
-    ALLOCATE(solid_array(isolid)%eta_table(SIZE(vti%tables, 1), &
-        SIZE(vti%tables, 2), SIZE(vti%tables, 3)))
-    solid_array(isolid)%eta_table = vti%tables(:,:,:,i_eta)
+    CALL get_vti_log_table(filename, vti, 'ElectricalResistivity', &
+        solid_array(isolid)%eta_table)
     solid_array(isolid)%log_interp_table = .TRUE.
 
   END SUBROUTINE setup_resistivity_table_vti

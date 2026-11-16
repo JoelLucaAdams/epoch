@@ -725,7 +725,8 @@ MODULE shared_data
     CHARACTER(LEN=string_length) :: resistivity_table_location = ''
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
-    ! Resistivity lookup table (loaded from resistivity_table_location)
+    ! Resistivity lookup table (loaded from resistivity_table_location). Tables
+    ! loaded from VTI files (log_interp_table) hold log10 of these values
     REAL(num), ALLOCATABLE :: rho_table(:)    ! mass density axis [kg/m^3]
     REAL(num), ALLOCATABLE :: te_table(:)     ! electron temperature axis [K]
     REAL(num), ALLOCATABLE :: ti_table(:)     ! ion temperature axis [K]
