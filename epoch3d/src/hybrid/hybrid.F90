@@ -226,8 +226,9 @@ CONTAINS
             END DO
 
             ! Do we need ionisation and Coulomb logarithm scripts?
-            ! If using Lee-More resistivity
-            IF (resistivity_model(ix,iy,iz) == c_resist_rlm) THEN
+            ! If using Lee-More resistivity or lookup table
+            IF (resistivity_model(ix,iy,iz) == c_resist_rlm &
+                .OR. resistivity_model(ix,iy,iz) == c_resist_table) THEN
               use_hy_cou_log = .TRUE.
               use_hy_ionisation = .TRUE.
             END IF
