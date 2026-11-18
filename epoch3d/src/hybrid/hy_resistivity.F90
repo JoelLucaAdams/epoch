@@ -223,53 +223,11 @@ CONTAINS
       IF (is_vti_file(solid_array(isolid)%resistivity_table_location)) THEN
         CALL setup_resistivity_table_vti(isolid)
         CYCLE
+      ELSE
+        CALL setup_resistivity_table_dat(isolid)
       END IF
-
-      IF (rank == 0) THEN
-        OPEN(unit=lu, &
-            file=TRIM(solid_array(isolid)%resistivity_table_location), &
-            status='OLD')
-        READ(lu,*) n_rho, n_te, n_ti
-        ALLOCATE(solid_array(isolid)%rho_table(n_rho))
-        ALLOCATE(solid_array(isolid)%te_table(n_te))
-        ALLOCATE(solid_array(isolid)%ti_table(n_ti))
-        ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
-
-        READ(lu,*) solid_array(isolid)%rho_table
-        READ(lu,*) solid_array(isolid)%te_table
-        READ(lu,*) solid_array(isolid)%ti_table
-        DO i_te = 1, n_te
-          DO i_rho = 1, n_rho
-            READ(lu,*) solid_array(isolid)%eta_table(i_rho, i_te, :)
-          END DO
-        END DO
-        CLOSE(unit=lu)
-      END IF
-
-      ! Array sizes are cast to all other ranks
-      CALL MPI_BCAST(n_rho, 1, MPI_INTEGER, 0, comm, errcode)
-      CALL MPI_BCAST(n_te,  1, MPI_INTEGER, 0, comm, errcode)
-      CALL MPI_BCAST(n_ti,  1, MPI_INTEGER, 0, comm, errcode)
-
-      ! All other ranks know the size from the MPI_BCAST and allocate arrays
-      IF (rank /= 0) THEN
-        ALLOCATE(solid_array(isolid)%rho_table(n_rho))
-        ALLOCATE(solid_array(isolid)%te_table(n_te))
-        ALLOCATE(solid_array(isolid)%ti_table(n_ti))
-        ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
-      END IF
-
-      ! Arrays are cast to all other ranks
-      CALL MPI_BCAST(solid_array(isolid)%rho_table, n_rho, mpireal, 0, &
-          comm, errcode)
-      CALL MPI_BCAST(solid_array(isolid)%te_table, n_te, mpireal, 0, &
-          comm, errcode)
-      CALL MPI_BCAST(solid_array(isolid)%ti_table, n_ti, mpireal, 0, &
-          comm, errcode)
-      CALL MPI_BCAST(solid_array(isolid)%eta_table, n_rho * n_te * n_ti, &
-          mpireal, 0, comm, errcode)
     END DO
-
+      
   END SUBROUTINE setup_resistivity_tables
 
 
@@ -301,6 +259,58 @@ CONTAINS
     solid_array(isolid)%log_interp_table = .TRUE.
 
   END SUBROUTINE setup_resistivity_table_vti
+
+
+
+  SUBROUTINE setup_resistivity_table_dat(isolid)
+
+    INTEGER, INTENT(IN) :: isolid
+
+    IF (rank == 0) THEN
+      OPEN(unit=lu, &
+          file=TRIM(solid_array(isolid)%resistivity_table_location), &
+          status='OLD')
+      READ(lu,*) n_rho, n_te, n_ti
+      ALLOCATE(solid_array(isolid)%rho_table(n_rho))
+      ALLOCATE(solid_array(isolid)%te_table(n_te))
+      ALLOCATE(solid_array(isolid)%ti_table(n_ti))
+      ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
+
+      READ(lu,*) solid_array(isolid)%rho_table
+      READ(lu,*) solid_array(isolid)%te_table
+      READ(lu,*) solid_array(isolid)%ti_table
+      DO i_te = 1, n_te
+        DO i_rho = 1, n_rho
+          READ(lu,*) solid_array(isolid)%eta_table(i_rho, i_te, :)
+        END DO
+      END DO
+      CLOSE(unit=lu)
+    END IF
+
+    ! Array sizes are cast to all other ranks
+    CALL MPI_BCAST(n_rho, 1, MPI_INTEGER, 0, comm, errcode)
+    CALL MPI_BCAST(n_te,  1, MPI_INTEGER, 0, comm, errcode)
+    CALL MPI_BCAST(n_ti,  1, MPI_INTEGER, 0, comm, errcode)
+
+    ! All other ranks know the size from the MPI_BCAST and allocate arrays
+    IF (rank /= 0) THEN
+      ALLOCATE(solid_array(isolid)%rho_table(n_rho))
+      ALLOCATE(solid_array(isolid)%te_table(n_te))
+      ALLOCATE(solid_array(isolid)%ti_table(n_ti))
+      ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
+    END IF
+
+    ! Arrays are cast to all other ranks
+    CALL MPI_BCAST(solid_array(isolid)%rho_table, n_rho, mpireal, 0, &
+        comm, errcode)
+    CALL MPI_BCAST(solid_array(isolid)%te_table, n_te, mpireal, 0, &
+        comm, errcode)
+    CALL MPI_BCAST(solid_array(isolid)%ti_table, n_ti, mpireal, 0, &
+        comm, errcode)
+    CALL MPI_BCAST(solid_array(isolid)%eta_table, n_rho * n_te * n_ti, &
+        mpireal, 0, comm, errcode)
+
+  END SUBROUTINE setup_resistivity_table_dat
 
 
 
