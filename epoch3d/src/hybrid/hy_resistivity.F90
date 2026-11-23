@@ -215,7 +215,7 @@ CONTAINS
 
     USE mpi
 
-    INTEGER :: isolid, i_rho, i_te, n_rho, n_te, n_ti
+    INTEGER :: isolid
 
     DO isolid = 1, solid_count
       IF (solid_array(isolid)%res_model /= c_resist_table) CYCLE
@@ -265,6 +265,7 @@ CONTAINS
   SUBROUTINE setup_resistivity_table_dat(isolid)
 
     INTEGER, INTENT(IN) :: isolid
+    INTEGER :: i_rho, i_te, n_rho, n_te, n_ti
 
     IF (rank == 0) THEN
       OPEN(unit=lu, &
