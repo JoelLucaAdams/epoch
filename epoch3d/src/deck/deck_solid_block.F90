@@ -44,19 +44,35 @@ CONTAINS
     IF (deck_state == c_ds_first) RETURN
 
     DO isolid = 1, solid_count
-      IF (rank == 0 .AND. use_hybrid .AND. &
-            solid_array(isolid)%res_model == c_resist_table) THEN
-        INQUIRE(file=TRIM(solid_array(isolid)%resistivity_table_location), &
-            exist=exists)
-        IF (.NOT.exists) THEN
-          DO iu = 1, nio_units ! Print to stdout and to file
-            io = io_units(iu)
-            WRITE(io,*) '*** ERROR ***'
-            WRITE(io,*) 'Unable to find the resistivity table ', &
-                '"' // TRIM(solid_array(isolid)%resistivity_table_location) &
-                    // '"'
-          END DO
-          CALL abort_code(c_err_io_error)
+      IF (rank == 0 .AND. use_hybrid) THEN
+        IF(solid_array(isolid)%res_model == c_resist_table) THEN
+          INQUIRE(file=TRIM(solid_array(isolid)%resistivity_table_location), &
+              exist=exists)
+          IF (.NOT.exists) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Unable to find the resistivity table ', &
+                  '"' // TRIM(solid_array(isolid)%resistivity_table_location) &
+                      // '"'
+            END DO
+            CALL abort_code(c_err_io_error)
+          END IF
+        END IF
+
+        IF(solid_array(isolid)%ion_model == c_ionisation_table) THEN
+          INQUIRE(file=TRIM(solid_array(isolid)%ionisation_table_location), &
+              exist=exists)
+          IF (.NOT.exists) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Unable to find the ionisation table ', &
+                  '"' // TRIM(solid_array(isolid)%ionisation_table_location) &
+                      // '"'
+            END DO
+            CALL abort_code(c_err_io_error)
+          END IF
         END IF
       END IF
     END DO
@@ -185,6 +201,38 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'ion_model') &
+        .OR. str_cmp(element, 'ionisation_model')) THEN
+      IF (str_cmp(value, 'tf') .OR. str_cmp(value, 'ThomasFermi')&
+        .OR. str_cmp(value, 'thomas_fermi')) THEN
+        solid_array(solid_index)%ion_model = c_thomas_fermi
+      ELSE IF (str_cmp(value, 'table')) THEN
+        solid_array(solid_index)%ion_model = c_ionisation_table
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) ''
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised ionisation model: ', TRIM(value)
+            WRITE(io,*) 'Code will use the Thomas Fermi ionisation model', &
+                'for this solid'
+            WRITE(io,*) ''
+          END DO
+        END IF
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'ionisation_table_location') &
+        .OR. str_cmp(element, 'ion_table_location')) THEN
+      CALL get_filename(TRIM(ADJUSTL(value)), filename, got_file, errcode)
+      IF (got_file) THEN
+        solid_array(solid_index)%ionisation_table_location = filename
+      END IF
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'ion_density') &
         .OR. str_cmp(element, 'rho' ) &
         .OR. str_cmp(element, 'ni')) THEN
@@ -228,7 +276,7 @@ CONTAINS
         solid_array(solid_index)%resistivity_table_location = filename
       END IF
       RETURN
-    END If
+    END IF
 
     errcode = c_err_unknown_element
 #endif
@@ -258,6 +306,20 @@ CONTAINS
             WRITE(io,*) 'You cannot specify a resistivity_table_location ', &
                 'without configuring res_model=table in this solid.'
             WRITE(io, *) 'Code will ignore the supplied resistivity table.'
+          END DO
+        END IF
+      END IF
+
+      IF (solid_array(isolid)%ion_model /= c_ionisation_table .AND. &
+        LEN_TRIM(solid_array(isolid)%ionisation_table_location) > 0) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'You cannot specify a ionisation_table_location ', &
+                'without configuring ion_model=table in this solid.'
+            WRITE(io, *) 'Code will ignore the supplied ionisation table.'
           END DO
         END IF
       END IF

@@ -48,7 +48,12 @@ CONTAINS
     DO iz = 1-ng, nz+ng
       DO iy = 1-ng, ny+ng
         DO ix = 1-ng, nx+ng
-          ion_charge(ix,iy,iz) = thomas_fermi_ionisation(ix,iy,iz)
+          SELECT CASE (ionisation_model(ix,iy,iz))
+          CASE(c_thomas_fermi)
+            ion_charge(ix,iy,iz) = thomas_fermi_ionisation(ix,iy,iz)
+          CASE(c_ionisation_table)
+            ion_charge(ix,iy,iz) = calc_ionisation_table(ix,iy,iz)
+          END SELECT
         END DO
       END DO
     END DO
@@ -230,6 +235,48 @@ CONTAINS
       
   END SUBROUTINE setup_resistivity_tables
 
+  SUBROUTINE setup_ionisation_tables
+
+    ! Reads each solid's ionisation table from disk (rank 0 only) then
+    ! broadcasts the data to all MPI ranks.
+
+    USE mpi
+
+    INTEGER :: isolid
+
+    DO isolid = 1, solid_count
+      IF (solid_array(isolid)%ion_model /= c_ionisation_table) CYCLE
+
+      IF (is_vti_file(solid_array(isolid)%ionisation_table_location)) THEN
+        CALL setup_ionisation_table_vti(isolid)
+        CYCLE
+      ELSE
+        ! TODO: Add dat file loading for ionisation data
+      END IF
+    END DO
+      
+  END SUBROUTINE setup_ionisation_tables
+
+  SUBROUTINE setup_ionisation_table_vti(isolid)
+
+    INTEGER, INTENT(IN) :: isolid
+    TYPE(vti_file) :: vti
+    CHARACTER(LEN=string_length) :: filename
+
+    filename = solid_array(isolid)%ionisation_table_location
+    CALL load_vti_file(filename, vti)
+
+    CALL get_vti_axis(filename, vti, 'MassDensity', 1, &
+        solid_array(isolid)%rho_table_ionisation)
+    CALL get_vti_axis(filename, vti, 'ElectronTemperature', 2, &
+        solid_array(isolid)%te_table_ionisation)
+
+    CALL get_vti_log_table(filename, vti, 'MeanIonisationState', &
+        solid_array(isolid)%ion_table)
+    solid_array(isolid)%log_interp_table = .TRUE.
+
+  END SUBROUTINE setup_ionisation_table_vti
+
 
 
   SUBROUTINE setup_resistivity_table_vti(isolid)
@@ -355,6 +402,41 @@ CONTAINS
     END IF
 
   END FUNCTION calc_resistivity_table
+
+
+
+   FUNCTION calc_ionisation_table(ix, iy, iz)
+
+    ! Calculates ionisation using trilinear interpolation on the table loaded
+    ! for the dominant solid at this cell. The dominant solid index is stored in
+    ! solid_index_model, set once at initialisation alongside ionisation_model,
+    ! using the same highest-electron-density criterion.
+
+    INTEGER, INTENT(IN) :: ix, iy, iz
+    REAL(num) :: calc_ionisation_table
+
+    INTEGER :: i_sol
+    REAL(num) :: rho_mass, te
+    CHARACTER(LEN=*), PARAMETER :: axis_labels(3) = &
+        (/ 'rho [kg/m^3]', 'te [K]      ', '            '/)
+
+    i_sol = solid_index_model(ix,iy,iz)
+    rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
+        * solid_array(i_sol)%mass_no * amu
+    te = hy_te(ix,iy,iz)
+
+    IF (solid_array(i_sol)%log_interp_table) THEN
+      calc_ionisation_table = interp_trilinear_log( &
+          solid_array(i_sol)%ionisation_table_location, &
+          solid_array(i_sol)%ion_table, &
+          solid_array(i_sol)%rho_table_ionisation, &
+          solid_array(i_sol)%te_table_ionisation, [1.0_num], &
+          (/ rho_mass, te, 0.0_num /), .TRUE., axis_labels, &
+          solid_array(i_sol)%table_warning, &
+          solid_array(i_sol)%table_last_index)
+    END IF
+
+  END FUNCTION calc_ionisation_table
 
 
 

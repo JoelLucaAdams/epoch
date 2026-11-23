@@ -205,10 +205,12 @@ CONTAINS
       ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
       ALLOCATE(resistivity_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
       ALLOCATE(solid_index_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ALLOCATE(ionisation_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
       ! Assign a resistivity model to each cell based on present solids
       ! (default to vacuum)
       resistivity_model = c_resist_vacuum
+      ionisation_model = c_thomas_fermi
       solid_index_model = 0
       DO iz = 1-ng, nz+ng
         DO iy = 1-ng, ny+ng
@@ -221,6 +223,7 @@ CONTAINS
               IF (solid_array(i_sol)%el_density(ix,iy,iz) > max_ne) THEN
                 max_ne = solid_array(i_sol)%el_density(ix,iy,iz)
                 resistivity_model(ix,iy,iz) = solid_array(i_sol)%res_model
+                ionisation_model(ix,iy,iz) = solid_array(i_sol)%ion_model
                 solid_index_model(ix,iy,iz) = i_sol
               END IF
             END DO
@@ -280,8 +283,9 @@ CONTAINS
       IF (ALLOCATED(ion_z_avg)) ion_z_avg = ion_z_avg / ion_ni
       IF (ALLOCATED(ion_a)) ion_a = ion_a / ion_ni
 
-      ! Load resistivity lookup tables for any table-model solids
+      ! Load lookup tables for any table-model solids
       CALL setup_resistivity_tables
+      CALL setup_ionisation_tables
 
       ! Initialise resistivity
       IF (use_hy_ionisation) CALL update_ionisation
@@ -322,7 +326,7 @@ CONTAINS
 
     ! Global arrays
     DEALLOCATE(hy_te, resistivity, resistivity_model, solid_index_model, &
-        hy_sum_ne)
+        hy_sum_ne, ionisation_model)
     DEALLOCATE(jbx, jby, jbz)
 
     ! Ionisation/resistivity optional arrays

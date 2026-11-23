@@ -722,15 +722,25 @@ MODULE shared_data
     REAL(num) :: mass_no = -1.0_num
     INTEGER :: z = -1
     INTEGER :: res_model = 1
+    INTEGER :: ion_model = 1
     CHARACTER(LEN=string_length) :: resistivity_table_location = ''
+    CHARACTER(LEN=string_length) :: ionisation_table_location = ''
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
-    ! Resistivity lookup table (loaded from resistivity_table_location). Tables
-    ! loaded from VTI files (log_interp_table) hold log10 of these values
-    REAL(num), ALLOCATABLE :: rho_table(:)    ! mass density axis [kg/m^3]
-    REAL(num), ALLOCATABLE :: te_table(:)     ! electron temperature axis [K]
-    REAL(num), ALLOCATABLE :: ti_table(:)     ! ion temperature axis [K]
+    ! Resistivity lookup table (loaded from resistivity_table_location)
+    REAL(num), ALLOCATABLE :: rho_table(:)     ! mass density axis [kg/m^3]
+    REAL(num), ALLOCATABLE :: te_table(:)      ! electron temperature axis [K]
+    REAL(num), ALLOCATABLE :: ti_table(:)      ! ion temperature axis [K]
     REAL(num), ALLOCATABLE :: eta_table(:,:,:) ! resistivity [Ohm.m] (rho,te,ti)
+
+    ! Ionisation lookup table (loaded from ionisation_table_location)
+    ! The values are the average number of electrons knocked off each atom
+    ! They must be positive values between 0 and it's atomic number Z
+    real(num), ALLOCATABLE :: rho_table_ionisation(:) ! mass density axis [kg/m^3]
+    real(num), ALLOCATABLE :: te_table_ionisation(:)  ! electron temperature axis [K]
+    real(num), ALLOCATABLE :: ion_table(:,:,:)   ! ionisation [] (rho, te, _)
+
+    ! VTI Table flags 
     LOGICAL :: log_interp_table = .FALSE.     ! interpolate in log10 (VTI)
     LOGICAL :: table_warning(3) = .TRUE.      ! warn once per axis if clamped
     INTEGER :: table_last_index(3) = 0        ! previous lookup's indices
@@ -753,6 +763,7 @@ MODULE shared_data
   REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: hy_sum_ne, resistivity, hy_te
   REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: jbx, jby, jbz
   INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: resistivity_model, solid_index_model
+  INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: ionisation_model
 
   ! Fit variables for the reduced Lee-More model (initial values for Al)
   REAL(num) :: rlm_1 = 7.0_num

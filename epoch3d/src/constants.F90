@@ -255,6 +255,10 @@ MODULE constants
   INTEGER, PARAMETER :: c_resist_plastic = 3
   INTEGER, PARAMETER :: c_resist_rlm = 4
   INTEGER, PARAMETER :: c_resist_table = 5
+
+  ! Hybrid Ionisation models
+  INTEGER, PARAMETER :: c_thomas_fermi = 1
+  INTEGER, PARAMETER :: c_ionisation_table = 2
 #endif
 
   ! Hybrid electron injector: mean e- energy models
