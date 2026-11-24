@@ -707,7 +707,7 @@ MODULE shared_data
   LOGICAL :: use_bremsstrahlung = .FALSE.
 
   !----------------------------------------------------------------------------
-  ! Hybrid mode - Written by S. J. Morris
+  ! Hybrid mode - Written by S. J. Morris (2021), Updated by J. L. Adams (2026)
   ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
   !----------------------------------------------------------------------------
 
