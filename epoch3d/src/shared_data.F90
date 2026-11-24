@@ -715,6 +715,23 @@ MODULE shared_data
   REAL(num) :: tnsa_escape_ke, tnsa_p_loss, tnsa_scatter_angle
 
 #ifdef HYBRID
+  TYPE :: lookup_table_axis
+    REAL(num), ALLOCATABLE :: values(:)
+  END TYPE lookup_table_axis
+
+  type lookup_table
+    CHARACTER(LEN=string_length) :: location = ''
+
+    TYPE(lookup_table_axis) :: axes(3)
+    REAL(num), ALLOCATABLE :: values(:,:,:)
+
+    LOGICAL :: interp_log = .FALSE. ! interpolate in log10
+    
+    CHARACTER(LEN=12) :: axes_label(3) = '' ! Label for each axis .e.g. rho [kg/m^3]
+    LOGICAL :: warn(3) = .TRUE.            ! warn once per axis if clamped
+    INTEGER :: last_index(3) = 0           ! Cached value of most recent lookup
+  END TYPE lookup_table
+
   TYPE solid
 
     ! Input variables
@@ -723,27 +740,18 @@ MODULE shared_data
     INTEGER :: z = -1
     INTEGER :: res_model = 1
     INTEGER :: ion_model = 1
-    CHARACTER(LEN=string_length) :: resistivity_table_location = ''
-    CHARACTER(LEN=string_length) :: ionisation_table_location = ''
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
-    ! Resistivity lookup table (loaded from resistivity_table_location)
-    REAL(num), ALLOCATABLE :: rho_table(:)     ! mass density axis [kg/m^3]
-    REAL(num), ALLOCATABLE :: te_table(:)      ! electron temperature axis [K]
-    REAL(num), ALLOCATABLE :: ti_table(:)      ! ion temperature axis [K]
-    REAL(num), ALLOCATABLE :: eta_table(:,:,:) ! resistivity [Ohm.m] (rho,te,ti)
+    ! A Resistivity lookup table should contain the values of resistivity
+    ! for a given mass density [kg/m^3], electron temperature [K] 
+    ! and ion temperature [K]
+    TYPE(lookup_table) :: resistivity_table
 
-    ! Ionisation lookup table (loaded from ionisation_table_location)
-    ! The values are the average number of electrons knocked off each atom
-    ! They must be positive values between 0 and it's atomic number Z
-    real(num), ALLOCATABLE :: rho_table_ionisation(:) ! mass density axis [kg/m^3]
-    real(num), ALLOCATABLE :: te_table_ionisation(:)  ! electron temperature axis [K]
-    real(num), ALLOCATABLE :: ion_table(:,:,:)   ! ionisation [] (rho, te, _)
-
-    ! VTI Table flags 
-    LOGICAL :: log_interp_table = .FALSE.     ! interpolate in log10 (VTI)
-    LOGICAL :: table_warning(3) = .TRUE.      ! warn once per axis if clamped
-    INTEGER :: table_last_index(3) = 0        ! previous lookup's indices
+    ! A Ionisation lookup table should contain the values of the average number
+    ! of electrons knocked off each atom for a given mass density [kg/m^3] and
+    ! electron temperature [K]. They must be positive values between 0
+    ! and it's atomic number Z.
+    TYPE(lookup_table) :: ionisation_table
 
     ! Derived variables
     REAL(num) :: theta_fac, ln_s, z_prime

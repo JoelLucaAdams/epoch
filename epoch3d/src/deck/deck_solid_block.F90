@@ -46,14 +46,14 @@ CONTAINS
     DO isolid = 1, solid_count
       IF (rank == 0 .AND. use_hybrid) THEN
         IF(solid_array(isolid)%res_model == c_resist_table) THEN
-          INQUIRE(file=TRIM(solid_array(isolid)%resistivity_table_location), &
+          INQUIRE(file=TRIM(solid_array(isolid)%resistivity_table%location), &
               exist=exists)
           IF (.NOT.exists) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
               io = io_units(iu)
               WRITE(io,*) '*** ERROR ***'
               WRITE(io,*) 'Unable to find the resistivity table ', &
-                  '"' // TRIM(solid_array(isolid)%resistivity_table_location) &
+                  '"' // TRIM(solid_array(isolid)%resistivity_table%location) &
                       // '"'
             END DO
             CALL abort_code(c_err_io_error)
@@ -61,14 +61,14 @@ CONTAINS
         END IF
 
         IF(solid_array(isolid)%ion_model == c_ionisation_table) THEN
-          INQUIRE(file=TRIM(solid_array(isolid)%ionisation_table_location), &
+          INQUIRE(file=TRIM(solid_array(isolid)%ionisation_table%location), &
               exist=exists)
           IF (.NOT.exists) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
               io = io_units(iu)
               WRITE(io,*) '*** ERROR ***'
               WRITE(io,*) 'Unable to find the ionisation table ', &
-                  '"' // TRIM(solid_array(isolid)%ionisation_table_location) &
+                  '"' // TRIM(solid_array(isolid)%ionisation_table%location) &
                       // '"'
             END DO
             CALL abort_code(c_err_io_error)
@@ -228,7 +228,7 @@ CONTAINS
         .OR. str_cmp(element, 'ion_table_location')) THEN
       CALL get_filename(TRIM(ADJUSTL(value)), filename, got_file, errcode)
       IF (got_file) THEN
-        solid_array(solid_index)%ionisation_table_location = filename
+        solid_array(solid_index)%ionisation_table%location = filename
       END IF
       RETURN
     END IF
@@ -273,7 +273,7 @@ CONTAINS
         .OR. str_cmp(element, 'res_table_location')) THEN
       CALL get_filename(TRIM(ADJUSTL(value)), filename, got_file, errcode)
       IF (got_file) THEN
-        solid_array(solid_index)%resistivity_table_location = filename
+        solid_array(solid_index)%resistivity_table%location = filename
       END IF
       RETURN
     END IF
@@ -297,7 +297,7 @@ CONTAINS
 #ifdef HYBRID
     DO isolid = 1, solid_count
       IF (solid_array(isolid)%res_model /= c_resist_table .AND. &
-        LEN_TRIM(solid_array(isolid)%resistivity_table_location) > 0) THEN
+        LEN_TRIM(solid_array(isolid)%resistivity_table%location) > 0) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
             io = io_units(iu)
@@ -311,7 +311,7 @@ CONTAINS
       END IF
 
       IF (solid_array(isolid)%ion_model /= c_ionisation_table .AND. &
-        LEN_TRIM(solid_array(isolid)%ionisation_table_location) > 0) THEN
+        LEN_TRIM(solid_array(isolid)%ionisation_table%location) > 0) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
             io = io_units(iu)

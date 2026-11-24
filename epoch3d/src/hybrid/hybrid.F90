@@ -46,6 +46,7 @@ MODULE hybrid
   USE hy_ionisation_loss
   USE hy_laser
   USE hy_resistivity
+  USE hy_tables
 #endif
 
   IMPLICIT NONE
@@ -284,8 +285,7 @@ CONTAINS
       IF (ALLOCATED(ion_a)) ion_a = ion_a / ion_ni
 
       ! Load lookup tables for any table-model solids
-      CALL setup_resistivity_tables
-      CALL setup_ionisation_tables
+      CALL setup_lookup_tables
 
       ! Initialise resistivity
       IF (use_hy_ionisation) CALL update_ionisation

@@ -27,6 +27,7 @@ MODULE hy_resistivity
 
   USE hy_shared
   USE vti_reader
+  USE hy_tables
 
   IMPLICIT NONE
 
@@ -203,164 +204,6 @@ CONTAINS
   END FUNCTION calc_resistivity_rlm
 
 
-  SUBROUTINE setup_resistivity_tables
-
-    ! Reads each solid's resistivity table from disk (rank 0 only) then
-    ! broadcasts the data to all MPI ranks. Files ending in .vti are loaded
-    ! by setup_resistivity_table_vti, any other file is read as plain ASCII.
-    !
-    ! File format (plain ASCII):
-    !   Line 1: n_rho n_te n_ti
-    !   Line 2: density values [kg/m^3], space-separated
-    !   Line 3: electron temperature values [eV], space-separated
-    !   Line 4: ion temperature values [eV], space-separated
-    !   Lines 5+: resistivity values [Ohm.m], one row per (i_rho, i_te) pair,
-    !             with n_ti values per row, varying i_rho slowest, i_te next,
-    !             i_ti fastest.
-
-    USE mpi
-
-    INTEGER :: isolid
-
-    DO isolid = 1, solid_count
-      IF (solid_array(isolid)%res_model /= c_resist_table) CYCLE
-
-      IF (is_vti_file(solid_array(isolid)%resistivity_table_location)) THEN
-        CALL setup_resistivity_table_vti(isolid)
-        CYCLE
-      ELSE
-        CALL setup_resistivity_table_dat(isolid)
-      END IF
-    END DO
-      
-  END SUBROUTINE setup_resistivity_tables
-
-  SUBROUTINE setup_ionisation_tables
-
-    ! Reads each solid's ionisation table from disk (rank 0 only) then
-    ! broadcasts the data to all MPI ranks.
-
-    USE mpi
-
-    INTEGER :: isolid
-
-    DO isolid = 1, solid_count
-      IF (solid_array(isolid)%ion_model /= c_ionisation_table) CYCLE
-
-      IF (is_vti_file(solid_array(isolid)%ionisation_table_location)) THEN
-        CALL setup_ionisation_table_vti(isolid)
-        CYCLE
-      ELSE
-        ! TODO: Add dat file loading for ionisation data
-      END IF
-    END DO
-      
-  END SUBROUTINE setup_ionisation_tables
-
-  SUBROUTINE setup_ionisation_table_vti(isolid)
-
-    INTEGER, INTENT(IN) :: isolid
-    TYPE(vti_file) :: vti
-    CHARACTER(LEN=string_length) :: filename
-
-    filename = solid_array(isolid)%ionisation_table_location
-    CALL load_vti_file(filename, vti)
-
-    CALL get_vti_axis(filename, vti, 'MassDensity', 1, &
-        solid_array(isolid)%rho_table_ionisation)
-    CALL get_vti_axis(filename, vti, 'ElectronTemperature', 2, &
-        solid_array(isolid)%te_table_ionisation)
-
-    CALL get_vti_log_table(filename, vti, 'MeanIonisationState', &
-        solid_array(isolid)%ion_table)
-    solid_array(isolid)%log_interp_table = .TRUE.
-
-  END SUBROUTINE setup_ionisation_table_vti
-
-
-
-  SUBROUTINE setup_resistivity_table_vti(isolid)
-
-    ! Loads the resistivity table for solid isolid from a VTI file, using the
-    ! FieldData arrays MassDensity [kg/m^3], ElectronTemperature [K] and
-    ! IonTemperature [K] as the axes of the PointData array
-    ! ElectricalResistivity [Ohm.m]. The axes and table are stored as log10
-    ! values, ready for interp_trilinear_log.
-
-    INTEGER, INTENT(IN) :: isolid
-    TYPE(vti_file) :: vti
-    CHARACTER(LEN=string_length) :: filename
-
-    filename = solid_array(isolid)%resistivity_table_location
-    CALL load_vti_file(filename, vti)
-
-    CALL get_vti_axis(filename, vti, 'MassDensity', 1, &
-        solid_array(isolid)%rho_table)
-    CALL get_vti_axis(filename, vti, 'ElectronTemperature', 2, &
-        solid_array(isolid)%te_table)
-    CALL get_vti_axis(filename, vti, 'IonTemperature', 3, &
-        solid_array(isolid)%ti_table)
-
-    CALL get_vti_log_table(filename, vti, 'ElectricalResistivity', &
-        solid_array(isolid)%eta_table)
-    solid_array(isolid)%log_interp_table = .TRUE.
-
-  END SUBROUTINE setup_resistivity_table_vti
-
-
-
-  SUBROUTINE setup_resistivity_table_dat(isolid)
-
-    INTEGER, INTENT(IN) :: isolid
-    INTEGER :: i_rho, i_te, n_rho, n_te, n_ti
-
-    IF (rank == 0) THEN
-      OPEN(unit=lu, &
-          file=TRIM(solid_array(isolid)%resistivity_table_location), &
-          status='OLD')
-      READ(lu,*) n_rho, n_te, n_ti
-      ALLOCATE(solid_array(isolid)%rho_table(n_rho))
-      ALLOCATE(solid_array(isolid)%te_table(n_te))
-      ALLOCATE(solid_array(isolid)%ti_table(n_ti))
-      ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
-
-      READ(lu,*) solid_array(isolid)%rho_table
-      READ(lu,*) solid_array(isolid)%te_table
-      READ(lu,*) solid_array(isolid)%ti_table
-      DO i_te = 1, n_te
-        DO i_rho = 1, n_rho
-          READ(lu,*) solid_array(isolid)%eta_table(i_rho, i_te, :)
-        END DO
-      END DO
-      CLOSE(unit=lu)
-    END IF
-
-    ! Array sizes are cast to all other ranks
-    CALL MPI_BCAST(n_rho, 1, MPI_INTEGER, 0, comm, errcode)
-    CALL MPI_BCAST(n_te,  1, MPI_INTEGER, 0, comm, errcode)
-    CALL MPI_BCAST(n_ti,  1, MPI_INTEGER, 0, comm, errcode)
-
-    ! All other ranks know the size from the MPI_BCAST and allocate arrays
-    IF (rank /= 0) THEN
-      ALLOCATE(solid_array(isolid)%rho_table(n_rho))
-      ALLOCATE(solid_array(isolid)%te_table(n_te))
-      ALLOCATE(solid_array(isolid)%ti_table(n_ti))
-      ALLOCATE(solid_array(isolid)%eta_table(n_rho, n_te, n_ti))
-    END IF
-
-    ! Arrays are cast to all other ranks
-    CALL MPI_BCAST(solid_array(isolid)%rho_table, n_rho, mpireal, 0, &
-        comm, errcode)
-    CALL MPI_BCAST(solid_array(isolid)%te_table, n_te, mpireal, 0, &
-        comm, errcode)
-    CALL MPI_BCAST(solid_array(isolid)%ti_table, n_ti, mpireal, 0, &
-        comm, errcode)
-    CALL MPI_BCAST(solid_array(isolid)%eta_table, n_rho * n_te * n_ti, &
-        mpireal, 0, comm, errcode)
-
-  END SUBROUTINE setup_resistivity_table_dat
-
-
 
   FUNCTION calc_resistivity_table(ix, iy, iz)
 
@@ -376,8 +219,6 @@ CONTAINS
 
     INTEGER :: i_sol
     REAL(num) :: rho_mass, te, ti
-    CHARACTER(LEN=*), PARAMETER :: axis_labels(3) = &
-        (/ 'rho [kg/m^3]', 'te [K]      ', 'ti [K]      ' /)
 
     i_sol = solid_index_model(ix,iy,iz)
     rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
@@ -389,16 +230,12 @@ CONTAINS
       ti = te
     END IF
 
-    IF (solid_array(i_sol)%log_interp_table) THEN
+    IF (solid_array(i_sol)%resistivity_table%interp_log) THEN
       calc_resistivity_table = interp_trilinear_log( &
-          solid_array(i_sol)%resistivity_table_location, &
-          solid_array(i_sol)%eta_table, solid_array(i_sol)%rho_table, &
-          solid_array(i_sol)%te_table, solid_array(i_sol)%ti_table, &
-          (/ rho_mass, te, ti /), .TRUE., axis_labels, &
-          solid_array(i_sol)%table_warning, &
-          solid_array(i_sol)%table_last_index)
+          solid_array(i_sol)%resistivity_table, (/ rho_mass, te, ti /))
     ELSE
-      calc_resistivity_table = interp_trilinear(rho_mass, te, ti, i_sol)
+      calc_resistivity_table = interp_trilinear( &
+          solid_array(i_sol)%resistivity_table, (/ rho_mass, te, ti /))
     END IF
 
   END FUNCTION calc_resistivity_table
@@ -417,137 +254,23 @@ CONTAINS
 
     INTEGER :: i_sol
     REAL(num) :: rho_mass, te
-    CHARACTER(LEN=*), PARAMETER :: axis_labels(3) = &
-        (/ 'rho [kg/m^3]', 'te [K]      ', '            '/)
 
     i_sol = solid_index_model(ix,iy,iz)
     rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
         * solid_array(i_sol)%mass_no * amu
     te = hy_te(ix,iy,iz)
 
-    IF (solid_array(i_sol)%log_interp_table) THEN
+    IF (solid_array(i_sol)%ionisation_table%interp_log) THEN
       calc_ionisation_table = interp_trilinear_log( &
-          solid_array(i_sol)%ionisation_table_location, &
-          solid_array(i_sol)%ion_table, &
-          solid_array(i_sol)%rho_table_ionisation, &
-          solid_array(i_sol)%te_table_ionisation, [1.0_num], &
-          (/ rho_mass, te, 0.0_num /), .TRUE., axis_labels, &
-          solid_array(i_sol)%table_warning, &
-          solid_array(i_sol)%table_last_index)
+          solid_array(i_sol)%ionisation_table, (/ rho_mass, te, 0.0_num /))
+    ELSE
+      calc_ionisation_table = interp_trilinear( &
+          solid_array(i_sol)%ionisation_table, (/ rho_mass, te, 0.0_num /))
     END IF
 
   END FUNCTION calc_ionisation_table
 
 
-
-  FUNCTION interp_trilinear(rho_in, te_in, ti_in, i_sol)
-
-    ! Trilinear (3-parameter linear Lagrange) interpolation on the resistivity
-    ! table for solid i_sol.
-
-    REAL(num), INTENT(IN) :: rho_in, te_in, ti_in
-    INTEGER, INTENT(IN) :: i_sol
-    REAL(num) :: interp_trilinear
-
-    INTEGER :: i1r, i2r, i1e, i2e, i1i, i2i
-    REAL(num) :: fr, fe, fi
-    REAL(num) :: w000, w100, w010, w110, w001, w101, w011, w111
-
-    CALL find_bracket_indices(rho_in, solid_array(i_sol)%rho_table, &
-        i1r, i2r, fr, 'rho [kg/m^3]', 1)
-    CALL find_bracket_indices(te_in,  solid_array(i_sol)%te_table,  &
-        i1e, i2e, fe, 'te [K]', 2)
-    CALL find_bracket_indices(ti_in,  solid_array(i_sol)%ti_table,  &
-        i1i, i2i, fi, 'ti [K]', 3)
-
-    w000 = (1.0_num-fr) * (1.0_num-fe) * (1.0_num-fi)
-    w100 = fr           * (1.0_num-fe) * (1.0_num-fi)
-    w010 = (1.0_num-fr) * fe           * (1.0_num-fi)
-    w110 = fr           * fe           * (1.0_num-fi)
-    w001 = (1.0_num-fr) * (1.0_num-fe) * fi
-    w101 = fr           * (1.0_num-fe) * fi
-    w011 = (1.0_num-fr) * fe           * fi
-    w111 = fr           * fe           * fi
-
-    interp_trilinear = &
-        w000 * solid_array(i_sol)%eta_table(i1r, i1e, i1i) + &
-        w100 * solid_array(i_sol)%eta_table(i2r, i1e, i1i) + &
-        w010 * solid_array(i_sol)%eta_table(i1r, i2e, i1i) + &
-        w110 * solid_array(i_sol)%eta_table(i2r, i2e, i1i) + &
-        w001 * solid_array(i_sol)%eta_table(i1r, i1e, i2i) + &
-        w101 * solid_array(i_sol)%eta_table(i2r, i1e, i2i) + &
-        w011 * solid_array(i_sol)%eta_table(i1r, i2e, i2i) + &
-        w111 * solid_array(i_sol)%eta_table(i2r, i2e, i2i)
-
-  END FUNCTION interp_trilinear
-
-
-
-  SUBROUTINE find_bracket_indices(x_in, x, i1, i2, fx, axis_name, axis_id)
-
-    ! Bisection search to find adjacent bracket indices i1, i2 in sorted
-    ! array x such that x(i1) <= x_in <= x(i2).  Returns the linear fraction
-    ! fx = (x_in - x(i1)) / (x(i2) - x(i1)).  Values outside the array range
-    ! are clamped to the nearest boundary with a one-time rank-0 warning,
-    ! issued independently per axis (axis_id selects which of rho/te/ti).
-
-    REAL(num), INTENT(IN) :: x_in
-    REAL(num), INTENT(IN) :: x(:)
-    INTEGER, INTENT(OUT) :: i1, i2
-    REAL(num), INTENT(OUT) :: fx
-    CHARACTER(*), INTENT(IN) :: axis_name
-    INTEGER, INTENT(IN) :: axis_id
-
-    INTEGER :: nx
-    REAL(num) :: xdif1, xdif2, xdifm
-    INTEGER :: im, io, iu
-    LOGICAL, SAVE :: warning(3) = .TRUE.
-
-    nx = SIZE(x)
-    xdif1 = x(1) - x_in
-    xdif2 = x(nx) - x_in
-
-    IF (xdif1 * xdif2 < 0.0_num) THEN
-      i1 = 1
-      i2 = nx
-      DO
-        im = (i1 + i2) / 2
-        xdifm = x(im) - x_in
-        IF (xdif1 * xdifm < 0.0_num) THEN
-          i2 = im
-        ELSE
-          i1 = im
-          xdif1 = xdifm
-        END IF
-        IF (i2 - i1 == 1) EXIT
-      END DO
-      fx = (x_in - x(i1)) / (x(i2) - x(i1))
-    ELSE
-      IF (warning(axis_id) .AND. rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*) '*** WARNING ***'
-          WRITE(io,*) 'Resistivity table lookup out of range for axis: ', &
-              TRIM(axis_name)
-          WRITE(io,*) 'Value: ', x_in, ' Table range: [', x(1), ', ', &
-              x(nx), ']'
-          WRITE(io,*) 'Clamping to boundary. No further warnings will be ', &
-              'issued for this axis.'
-        END DO
-        warning(axis_id) = .FALSE.
-      END IF
-      IF (xdif1 >= 0.0_num) THEN
-        i1 = 1
-        i2 = MIN(2, nx)
-        fx = 0.0_num
-      ELSE
-        i1 = MAX(nx - 1, 1)
-        i2 = nx
-        fx = 1.0_num
-      END IF
-    END IF
-
-  END SUBROUTINE find_bracket_indices
 
   FUNCTION thomas_fermi_ionisation(ix, iy, iz)
 
