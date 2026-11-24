@@ -739,8 +739,8 @@ MODULE shared_data
     REAL(num) :: iex = -1.0_num
     REAL(num) :: mass_no = -1.0_num
     INTEGER :: z = -1
-    INTEGER :: res_model = 1
-    INTEGER :: ion_model = 1
+    INTEGER :: res_model = c_resist_vacuum
+    INTEGER :: ion_model = c_thomas_fermi
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
     ! A Resistivity lookup table should contain the values of resistivity
