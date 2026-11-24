@@ -18,7 +18,7 @@ CONTAINS
     DO isolid = 1, solid_count
       IF(solid_array(isolid)%res_model == c_resist_table) &
         CALL load_lookup_table(solid_array(isolid)%resistivity_table, &
-        default_axes_names, 'ElectricalResistivity')
+            default_axes_names, 'ElectricalResistivity')
 
       IF(solid_array(isolid)%ion_model == c_ionisation_table) &
         CALL load_lookup_table(solid_array(isolid)%ionisation_table, &
@@ -337,12 +337,12 @@ CONTAINS
     ! can have any spacing as long as they increase. With log interpolation
     ! (table%interpolation), the axis holds log10 of its values (see
     ! log10_table) and the point is placed on it in log10, otherwise the point
-    ! is placed on it as it is. On entry,
-    ! table%last_index(dim) is the index found by the previous lookup, which
-    ! the search starts from. On exit, it is the index of the axis point just
-    ! below, and fraction_along_axis is how far towards the next point (0 to
-    ! 1). Points outside the axis are clamped to the nearest edge, with a
-    ! warning on rank 0 the first time it happens on each axis (table%warn).
+    ! is placed on it as it is. On entry, table%last_index(dim) is the index
+    ! found by the previous lookup, which the search starts from. On exit, it
+    ! is the index of the axis point just below, and fraction_along_axis is how
+    ! far towards the next point (0 to 1). Points outside the axis are clamped 
+    ! to the nearest edge, with a warning on rank 0 the first time it happens on 
+    ! each axis (table%warn).
 
     TYPE(lookup_table), INTENT(INOUT) :: table
     REAL(num), INTENT(IN) :: point
@@ -379,15 +379,15 @@ CONTAINS
       axis_point = point
     END IF
 
-    ! Temporarily point to the axis values, once complete this pointer is
-    ! deleted
+    ! Create temporary variable axis that points to the axis values
+    ! This is simply to improve readability of the below code
     ASSOCIATE (axis => table%axes(dim)%values)
 
       last_point = SIZE(axis)
 
       ! Points outside the table get the nearest edge value, with a warning
       IF (axis_point < axis(1) .OR. axis_point > axis(last_point)) THEN
-        IF (table%warn(dim) .AND. rank == 0) THEN
+        IF (table%warn(dim)) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
             io = ios_units(iu)
             WRITE(io,*) '*** WARNING ***'
