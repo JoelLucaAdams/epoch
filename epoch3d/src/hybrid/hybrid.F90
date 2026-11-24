@@ -237,6 +237,10 @@ CONTAINS
               use_hy_ionisation = .TRUE.
             END IF
 
+            ! An ionisation table is only used if the ionisation is updated
+            IF (ionisation_model(ix,iy,iz) == c_ionisation_table) &
+                use_hy_ionisation = .TRUE.
+
           END DO
         END DO
       END DO
