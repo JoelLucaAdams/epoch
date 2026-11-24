@@ -223,9 +223,9 @@ CONTAINS
 
     DO i_axis = 1, 3
       IF (ANY(table%axes(i_axis)%values <= 0.0_num)) THEN
-        WRITE(message, '(A, I0, A)') 'Axis ', i_axis, ' has values <= 0, ' &
-            // 'so the table can''t be interpolated in log10. Set its ' &
-            // 'interpolation to linear in the solid block'
+        message = 'Axis ' // TRIM(table%axes(i_axis)%name) &
+            // ' has values <= 0, so the table can''t be interpolated in ' &
+            // 'log10. Set its interpolation to linear in the solid block'
         CALL table_error(table, message)
       END IF
       table%axes(i_axis)%values = LOG10(table%axes(i_axis)%values)
