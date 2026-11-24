@@ -221,18 +221,20 @@ CONTAINS
 
   SUBROUTINE table_error(table, message)
 
-    ! Prints an error about the table's file, then aborts
+    ! Prints an error about the table's file on rank 0, then aborts
 
     TYPE(lookup_table), INTENT(IN) :: table
     CHARACTER(LEN=*), INTENT(IN) :: message
     INTEGER :: io, iu
 
-    DO iu = 1, nio_units ! Print to stdout and to file
-      io = ios_units(iu)
-      WRITE(io,*) '*** ERROR ***'
-      WRITE(io,*) TRIM(message)
-      WRITE(io,*) 'Table file: "' // TRIM(table%location) // '"'
-    END DO
+    IF (rank == 0) THEN
+      DO iu = 1, nio_units ! Print to stdout and to file
+        io = ios_units(iu)
+        WRITE(io,*) '*** ERROR ***'
+        WRITE(io,*) TRIM(message)
+        WRITE(io,*) 'Table file: "' // TRIM(table%location) // '"'
+      END DO
+    END IF
     CALL abort_code(c_err_io_error)
 
   END SUBROUTINE table_error
