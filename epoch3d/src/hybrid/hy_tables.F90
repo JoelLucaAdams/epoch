@@ -223,7 +223,6 @@ CONTAINS
     CHARACTER(LEN=string_length) :: message
 
     DO i_axis = 1, 3
-      IF (.NOT. ALLOCATED(table%axes(i_axis)%values)) CYCLE
       IF (ANY(table%axes(i_axis)%values <= 0.0_num)) THEN
         WRITE(message, '(A, I0, A)') 'Axis ', i_axis, ' has values <= 0, ' &
             // 'so the table can''t be interpolated in log10. Set its ' &
@@ -295,8 +294,8 @@ CONTAINS
     !   c_interp_log: the axes and values hold log10 of the data (see
     !     log10_table) and the interpolation is done in log10 (log-log), which
     !     is exact for power laws
-    ! If less than three dimensions are present then the missing ones are
-    ! ignored
+    ! A table with fewer than three axes has one-point axes in place of the
+    ! missing ones (see load_lookup_table), so their points are ignored
 
     TYPE(lookup_table), INTENT(INOUT) :: table
     REAL(num), INTENT(IN) :: points(3)
@@ -307,14 +306,7 @@ CONTAINS
 
     ! For each axis, the two neighbouring indices and their weights
     DO i_dim = 1, 3
-      ! Some tables may only contain 2 axes and therefore the Z axis might
-      ! not be allocated so we set the index to 1 and the fraction to 0
-      IF (.NOT. ALLOCATED(table%axes(i_dim)%values)) THEN
-        table%last_index(i_dim) = 1
-        fraction_along_axis = 0.0_num
-      ELSE
         CALL locate(table, points(i_dim), i_dim, fraction_along_axis)
-      END IF
 
       idx(:,i_dim) = (/ table%last_index(i_dim), table%last_index(i_dim) + 1 /)
       weights(:,i_dim) = &
