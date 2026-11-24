@@ -529,7 +529,7 @@ file_injectors.o: file_injectors.F90 partlist.o utilities.o
 finish.o: finish.f90 background_collisions.o collisions.o constants.o deck.o \
 	diagnostics.o dist_fn.o injectors.o ionise.o laser.o probes.o setup.o window.o
 helper.o: helper.F90 balance.o boundary.o deltaf_loader.o partlist.o simple_io.o
-hy_tables.o: vti_reader.o hy_shared.o
+hy_tables.o: hy_tables.F90 vti_reader.o hy_shared.o
 hy_elastic.o: hy_elastic.F90 particles.o hy_shared.o
 hy_fields.o: hy_fields.F90 hy_shared.o
 hy_heating.o: hy_heating.F90 hy_shared.o
