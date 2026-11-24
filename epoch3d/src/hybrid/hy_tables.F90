@@ -42,12 +42,26 @@ CONTAINS
     TYPE(lookup_table), INTENT(INOUT) :: table
     CHARACTER(LEN=*), INTENT(IN) :: axes_names(:)
     CHARACTER(LEN=*), INTENT(IN) :: table_value_name
+    INTEGER :: i_axis
 
     IF (is_vti_file(table%location)) THEN
       CALL load_table_vti(table, axes_names, table_value_name)
     ELSE
       CALL load_table_dat(table, axes_names, table_value_name)
     END IF
+
+    ! Name each axis. An axis the table doesn't have, such as the third axis
+    ! of a 2D table, gets a single point (its value is never used), so from
+    ! here on it's treated like any other flat axis (see locate). Both loaders
+    ! already give the values a size of 1 along it.
+    DO i_axis = 1, 3
+      IF (i_axis <= SIZE(axes_names)) THEN
+        table%axes(i_axis)%name = axes_names(i_axis)
+      ELSE
+        ALLOCATE(table%axes(i_axis)%values(1))
+        table%axes(i_axis)%values = 1.0_num
+      END IF
+    END DO
 
     IF (table%interpolation == c_interp_log) CALL log10_table(table)
 
@@ -360,7 +374,7 @@ CONTAINS
     IF (log_axis) THEN
       IF (point <= 0.0_num) THEN
         PRINT*, '*** ERROR ***'
-        PRINT*, 'Unable to take the log of ', TRIM(table%axes_label(dim)), &
+        PRINT*, 'Unable to take the log of ', TRIM(table%axes(dim)%name), &
             ' = ', point, ' in a table lookup'
         PRINT*, 'Table file: "' // TRIM(table%location) // '"'
         CALL abort_code(c_err_bad_value)
@@ -383,7 +397,7 @@ CONTAINS
             io = ios_units(iu)
             WRITE(io,*) '*** WARNING ***'
             WRITE(io,*) 'Table lookup out of range for axis: ', &
-                TRIM(table%axes_label(dim))
+                TRIM(table%axes(dim)%name)
             WRITE(io,*) 'Table file: "' // TRIM(table%location) // '"'
             IF (log_axis) THEN
               WRITE(io,*) 'Value: ', point, ' Table range: [', &

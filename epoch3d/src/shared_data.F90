@@ -716,6 +716,7 @@ MODULE shared_data
 
 #ifdef HYBRID
   TYPE :: lookup_table_axis
+    CHARACTER(LEN=string_length) :: name = '' ! Label for each axis .e.g. MassDensity
     REAL(num), ALLOCATABLE :: values(:)
   END TYPE lookup_table_axis
 
@@ -728,7 +729,6 @@ MODULE shared_data
     ! c_interp_log or c_interp_linear, set in the deck
     INTEGER :: interpolation = c_interp_linear
     
-    CHARACTER(LEN=12) :: axes_label(3) = '' ! Label for each axis .e.g. rho [kg/m^3]
     LOGICAL :: warn(3) = .TRUE.            ! warn once per axis if clamped
     INTEGER :: last_index(3) = 0           ! Cached value of most recent lookup
   END TYPE lookup_table
