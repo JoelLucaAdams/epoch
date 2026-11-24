@@ -30,7 +30,7 @@ CONTAINS
 
 
   SUBROUTINE load_lookup_table(table, axes_names, table_value_name)
-  
+
     ! Files ending in .vti are read as VTI files, any other file is read as
     ! plain text (see load_table_dat). Both formats name their axes and
     ! values, which must match axes_names and table_value_name. The table is
@@ -340,9 +340,9 @@ CONTAINS
     ! is placed on it as it is. On entry, table%last_index(dim) is the index
     ! found by the previous lookup, which the search starts from. On exit, it
     ! is the index of the axis point just below, and fraction_along_axis is how
-    ! far towards the next point (0 to 1). Points outside the axis are clamped 
-    ! to the nearest edge, with a warning on rank 0 the first time it happens on 
-    ! each axis (table%warn).
+    ! far towards the next point (0 to 1). Points outside the axis are clamped
+    ! to the nearest edge, with a warning the first time it happens on each
+    ! axis on each rank (table%warn).
 
     TYPE(lookup_table), INTENT(INOUT) :: table
     REAL(num), INTENT(IN) :: point
@@ -367,6 +367,8 @@ CONTAINS
       IF (point <= 0.0_num) THEN
         DO iu = 1, nio_units
           io = ios_units(iu)
+          ! Only rank 0 has epoch3d.dat open
+          IF (rank /= 0 .AND. io == stat_unit) CYCLE
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'Unable to take the log of ', &
               TRIM(table%axes(dim)%name), ' = ', point, ' in a table lookup'
@@ -390,6 +392,8 @@ CONTAINS
         IF (table%warn(dim)) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
             io = ios_units(iu)
+            ! Only rank 0 has epoch3d.dat open
+            IF (rank /= 0 .AND. io == stat_unit) CYCLE
             WRITE(io,*) '*** WARNING ***'
             WRITE(io,*) 'Table lookup out of range for axis: ', &
                 TRIM(table%axes(dim)%name)
