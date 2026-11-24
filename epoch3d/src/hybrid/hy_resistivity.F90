@@ -26,7 +26,6 @@ MODULE hy_resistivity
 #ifdef HYBRID
 
   USE hy_shared
-  USE vti_reader
   USE hy_tables
 
   IMPLICIT NONE
