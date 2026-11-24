@@ -67,7 +67,7 @@ CONTAINS
     ! ranks
 
     CHARACTER(LEN=*), INTENT(IN) :: filename
-    TYPE(vti_file), INTENT(OUT) :: vti
+    TYPE(vti_file), INTENT(INOUT) :: vti
 
     IF (rank == 0) CALL read_vti_file(filename, vti)
     CALL broadcast_vti_file(vti)
