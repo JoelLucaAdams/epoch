@@ -207,7 +207,7 @@ CONTAINS
     ! Print the FieldData and PointData arrays
     DO iu = 1, nio_units ! Print to stdout and to file
       io = ios_units(iu)
-      WRITE(io,*) 'Loaded lookup table(s) from "' // TRIM(filename) // '"'
+      WRITE(io,*) 'Loaded lookup table from "' // TRIM(filename) // '"'
     END DO
 
   END SUBROUTINE read_vti_file
