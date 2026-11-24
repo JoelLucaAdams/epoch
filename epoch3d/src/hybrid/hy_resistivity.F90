@@ -210,9 +210,10 @@ CONTAINS
     ! Calculates resistivity using trilinear interpolation on the table loaded
     ! for the dominant solid at this cell. The dominant solid index is stored in
     ! solid_index_model, set once at initialisation alongside resistivity_model,
-    ! using the same highest-electron-density criterion. Tables loaded from VTI
-    ! files are interpolated in log10, other tables are interpolated linearly.
-    ! VTI out of range warnings are given once per axis for each solid.
+    ! using the same highest-electron-density criterion. The table is
+    ! interpolated in log10 or linearly, as set in the deck by
+    ! resistivity_table_interpolation. Out of range warnings are given once per
+    ! axis for each solid.
 
     INTEGER, INTENT(IN) :: ix, iy, iz
     REAL(num) :: calc_resistivity_table
@@ -230,13 +231,8 @@ CONTAINS
       ti = te
     END IF
 
-    IF (solid_array(i_sol)%resistivity_table%interp_log) THEN
-      calc_resistivity_table = interp_trilinear_log( &
-          solid_array(i_sol)%resistivity_table, (/ rho_mass, te, ti /))
-    ELSE
-      calc_resistivity_table = interp_trilinear( &
-          solid_array(i_sol)%resistivity_table, (/ rho_mass, te, ti /))
-    END IF
+    calc_resistivity_table = interp_trilinear( &
+        solid_array(i_sol)%resistivity_table, (/ rho_mass, te, ti /))
 
   END FUNCTION calc_resistivity_table
 
@@ -247,7 +243,9 @@ CONTAINS
     ! Calculates ionisation using trilinear interpolation on the table loaded
     ! for the dominant solid at this cell. The dominant solid index is stored in
     ! solid_index_model, set once at initialisation alongside ionisation_model,
-    ! using the same highest-electron-density criterion.
+    ! using the same highest-electron-density criterion. The table is
+    ! interpolated in log10 or linearly, as set in the deck by
+    ! ionisation_table_interpolation.
 
     INTEGER, INTENT(IN) :: ix, iy, iz
     REAL(num) :: calc_ionisation_table
@@ -260,13 +258,8 @@ CONTAINS
         * solid_array(i_sol)%mass_no * amu
     te = hy_te(ix,iy,iz)
 
-    IF (solid_array(i_sol)%ionisation_table%interp_log) THEN
-      calc_ionisation_table = interp_trilinear_log( &
-          solid_array(i_sol)%ionisation_table, (/ rho_mass, te, 0.0_num /))
-    ELSE
-      calc_ionisation_table = interp_trilinear( &
-          solid_array(i_sol)%ionisation_table, (/ rho_mass, te, 0.0_num /))
-    END IF
+    calc_ionisation_table = interp_trilinear( &
+        solid_array(i_sol)%ionisation_table, (/ rho_mass, te, 0.0_num /))
 
   END FUNCTION calc_ionisation_table
 

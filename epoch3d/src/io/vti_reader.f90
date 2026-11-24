@@ -15,10 +15,10 @@
 !
 ! vti_reader.f90
 !
-! Loads lookup tables from VTK ImageData (.vti) files, and interpolates them in
-! log10. Only uncompressed, little-endian files with raw appended data are
-! supported. FieldData arrays hold metadata (such as the table axes) and each
-! PointData array holds one table.
+! Loads lookup tables from VTK ImageData (.vti) files. Only uncompressed,
+! little-endian files with raw appended data are supported. FieldData arrays
+! hold metadata (such as the table axes) and each PointData array holds one
+! table.
 !
 ! The file is read on rank 0 and broadcast to all other ranks, so
 ! load_vti_file must be called by every rank, after the input deck is read.
@@ -34,7 +34,7 @@ MODULE vti_reader
   PRIVATE
   PUBLIC :: vti_data_array, vti_file
   PUBLIC :: load_vti_file, is_vti_file, find_vti_data_array_index, get_vti_axis
-  PUBLIC :: get_vti_log_table
+  PUBLIC :: get_vti_table
 
   TYPE vti_data_array
     CHARACTER(LEN=string_length) :: data_type
@@ -330,9 +330,8 @@ CONTAINS
 
   SUBROUTINE get_vti_axis(filename, vti, name, axis_dim, axis)
 
-    ! Copies log10 of the FieldData array called name into axis, checking that
-    ! it can be used as dimension axis_dim of the tables when interpolating in
-    ! log10
+    ! Copies the FieldData array called name into axis, checking that it can
+    ! be used as dimension axis_dim of the tables
 
     CHARACTER(LEN=*), INTENT(IN) :: filename, name
     TYPE(vti_file), INTENT(IN) :: vti
@@ -353,23 +352,17 @@ CONTAINS
     ALLOCATE(axis(n))
     axis = vti%field_data(i)%real_values
 
-    IF (ANY(axis <= 0.0_num)) &
-        CALL vti_error(filename, 'FieldData array "' // name &
-            // '" must be positive to interpolate in log10')
     IF (ANY(axis(2:n) < axis(1:n-1))) &
         CALL vti_error(filename, 'FieldData array "' // name &
             // '" must be increasing')
-
-    axis = LOG10(axis)
 
   END SUBROUTINE get_vti_axis
 
 
 
-  SUBROUTINE get_vti_log_table(filename, vti, name, table)
+  SUBROUTINE get_vti_table(filename, vti, name, table)
 
-    ! Copies log10 of the PointData table called name into table, so that it
-    ! can be interpolated by interp_trilinear_log with log_values
+    ! Copies the PointData table called name into table
 
     CHARACTER(LEN=*), INTENT(IN) :: filename, name
     TYPE(vti_file), INTENT(IN) :: vti
@@ -377,15 +370,12 @@ CONTAINS
     INTEGER :: i
 
     i = find_vti_data_array_index(filename, vti%point_data, name)
-    IF (ANY(vti%tables(:,:,:,i) <= 0.0_num)) &
-        CALL vti_error(filename, 'PointData array "' // name &
-            // '" must be positive to interpolate in log10')
 
     ALLOCATE(table(SIZE(vti%tables, 1), SIZE(vti%tables, 2), &
         SIZE(vti%tables, 3)))
-    table = LOG10(vti%tables(:,:,:,i))
+    table = vti%tables(:,:,:,i)
 
-  END SUBROUTINE get_vti_log_table
+  END SUBROUTINE get_vti_table
 
 
 

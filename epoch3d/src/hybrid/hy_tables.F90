@@ -4,7 +4,7 @@ MODULE hy_tables
     IMPLICIT NONE
 
     ! PRIVATE
-    PUBLIC :: interp_trilinear_log, interp_trilinear
+    PUBLIC :: interp_trilinear
 
     CHARACTER(LEN=*), PARAMETER :: default_vti_axes_names(3) = &
       (/ 'MassDensity        ', 'ElectronTemperature', 'IonTemperature     ' /)
@@ -32,9 +32,12 @@ CONTAINS
 
   SUBROUTINE load_lookup_table(table, axes_names, table_value_name)
   
-    ! VTI files are interpolated in log10. Any other file is read as plain
-    ! text (see load_table_dat) and interpolated linearly. Both formats name
-    ! their axes and values, which must match axes_names and table_value_name.
+    ! Files ending in .vti are read as VTI files, any other file is read as
+    ! plain text (see load_table_dat). Both formats name their axes and
+    ! values, which must match axes_names and table_value_name. The table is
+    ! then stored ready for the interpolation chosen in the deck
+    ! (table%interpolation): as log10 for c_interp_log, as it is for
+    ! c_interp_linear.
 
     TYPE(lookup_table), INTENT(INOUT) :: table
     CHARACTER(LEN=*), INTENT(IN) :: axes_names(:)
@@ -45,6 +48,8 @@ CONTAINS
     ELSE
       CALL load_table_dat(table, axes_names, table_value_name)
     END IF
+
+    IF (table%interpolation == c_interp_log) CALL log10_table(table)
 
   END SUBROUTINE load_lookup_table
 
@@ -63,8 +68,7 @@ CONTAINS
           table%axes(i_axis)%values)
     END DO
 
-    CALL get_vti_log_table(table%location, vti, table_value_name, table%values)
-    table%interp_log = .TRUE.
+    CALL get_vti_table(table%location, vti, table_value_name, table%values)
 
   END SUBROUTINE
 
@@ -73,8 +77,7 @@ CONTAINS
   SUBROUTINE load_table_dat(table, axes_names, table_value_name)
 
     ! Loads a table from a plain text file. It is read on rank 0 then
-    ! broadcast to all ranks. The axes and values are kept as they are, for
-    ! linear interpolation. As in a VTI file, the axes and values are named,
+    ! broadcast to all ranks. As in a VTI file, the axes and values are named,
     ! and the names must match axes_names and table_value_name.
     !
     ! File format (blank lines, and lines starting with #, can come before
@@ -191,9 +194,37 @@ CONTAINS
           0, comm, errcode)
     END DO
     CALL MPI_BCAST(table%values, PRODUCT(n_points), mpireal, 0, comm, errcode)
-    table%interp_log = .FALSE.
 
   END SUBROUTINE load_table_dat
+
+
+
+  SUBROUTINE log10_table(table)
+
+    ! Replaces the table's axes and values with their log10.
+    ! Called by every rank once the table is loaded.
+
+    TYPE(lookup_table), INTENT(INOUT) :: table
+    INTEGER :: i_axis
+    CHARACTER(LEN=string_length) :: message
+
+    DO i_axis = 1, 3
+      IF (.NOT. ALLOCATED(table%axes(i_axis)%values)) CYCLE
+      IF (ANY(table%axes(i_axis)%values <= 0.0_num)) THEN
+        WRITE(message, '(A, I0, A)') 'Axis ', i_axis, ' has values <= 0, ' &
+            // 'so the table can''t be interpolated in log10. Set its ' &
+            // 'interpolation to linear in the solid block'
+        CALL table_error(table, message)
+      END IF
+      table%axes(i_axis)%values = LOG10(table%axes(i_axis)%values)
+    END DO
+
+    IF (ANY(table%values <= 0.0_num)) CALL table_error(table, &
+        'The table has values <= 0, so it can''t be interpolated in ' &
+        // 'log10. Set its interpolation to linear in the solid block')
+    table%values = LOG10(table%values)
+
+  END SUBROUTINE log10_table
 
 
 
@@ -241,49 +272,20 @@ CONTAINS
 
 
 
-  FUNCTION interp_trilinear_log(table, points) RESULT(value)
-
-    ! Interpolate a lookup table in log10 (log-log), for a table whose axes
-    ! and values hold log10 of the data (see get_vti_axis and
-    ! get_vti_log_table). This is exact for power laws. points are given as
-    ! they are, not in log10.
-
-    TYPE(lookup_table), INTENT(INOUT) :: table
-    REAL(num), INTENT(IN) :: points(3)
-    REAL(num) :: value
-
-    value = 10.0_num**interp_table(table, points, .TRUE.)
-
-  END FUNCTION interp_trilinear_log
-
-
-
   FUNCTION interp_trilinear(table, points) RESULT(value)
 
-    ! Interpolate a lookup table linearly, for a table whose axes and values
-    ! hold the data as it is. This is exact for functions that are linear
-    ! along each axis.
+    ! Interpolate a lookup table at points, given as they are (not in log10),
+    ! using the interpolation chosen in the deck (table%interpolation):
+    !   c_interp_linear: the interpolation is done on the data as it is, which
+    !     is exact for functions that are linear along each axis
+    !   c_interp_log: the axes and values hold log10 of the data (see
+    !     log10_table) and the interpolation is done in log10 (log-log), which
+    !     is exact for power laws
+    ! If less than three dimensions are present then the missing ones are
+    ! ignored
 
     TYPE(lookup_table), INTENT(INOUT) :: table
     REAL(num), INTENT(IN) :: points(3)
-    REAL(num) :: value
-
-    value = interp_table(table, points, .FALSE.)
-
-  END FUNCTION interp_trilinear
-
-
-
-  FUNCTION interp_table(table, points, log_axes) RESULT(value)
-
-    ! Weighted sum of the table values at the corners around points, shared
-    ! by interp_trilinear_log and interp_trilinear. With log_axes, points are
-    ! placed on the axes in log10 (see locate). If less than three dimensions
-    ! are present then the missing ones are ignored
-
-    TYPE(lookup_table), INTENT(INOUT) :: table
-    REAL(num), INTENT(IN) :: points(3)
-    LOGICAL, INTENT(IN) :: log_axes
     REAL(num) :: value
     INTEGER :: i, j, k, i_dim, last(3)
     INTEGER :: idx(0:1,3)
@@ -297,7 +299,7 @@ CONTAINS
         table%last_index(i_dim) = 1
         fraction_along_axis = 0.0_num
       ELSE
-        CALL locate(table, points(i_dim), i_dim, log_axes, fraction_along_axis)
+        CALL locate(table, points(i_dim), i_dim, fraction_along_axis)
       END IF
 
       idx(:,i_dim) = (/ table%last_index(i_dim), table%last_index(i_dim) + 1 /)
@@ -318,16 +320,19 @@ CONTAINS
       END DO
     END DO
 
-  END FUNCTION interp_table
+    IF (table%interpolation == c_interp_log) value = 10.0_num**value
+
+  END FUNCTION interp_trilinear
 
 
 
-  SUBROUTINE locate(table, point, dim, log_axis, fraction_along_axis)
+  SUBROUTINE locate(table, point, dim, fraction_along_axis)
 
     ! Find where "point" falls along axis dim of the table. The axis values
-    ! can have any spacing as long as they increase. With log_axis, the axis
-    ! holds log10 of its values (see get_vti_axis) and the point is placed on
-    ! it in log10, otherwise the point is placed on it as it is. On entry,
+    ! can have any spacing as long as they increase. With log interpolation
+    ! (table%interpolation), the axis holds log10 of its values (see
+    ! log10_table) and the point is placed on it in log10, otherwise the point
+    ! is placed on it as it is. On entry,
     ! table%last_index(dim) is the index found by the previous lookup, which
     ! the search starts from. On exit, it is the index of the axis point just
     ! below, and fraction_along_axis is how far towards the next point (0 to
@@ -337,10 +342,12 @@ CONTAINS
     TYPE(lookup_table), INTENT(INOUT) :: table
     REAL(num), INTENT(IN) :: point
     INTEGER, INTENT(IN) :: dim
-    LOGICAL, INTENT(IN) :: log_axis
     REAL(num), INTENT(OUT) :: fraction_along_axis
     INTEGER :: low, high, middle, step, last_point, io, iu
     REAL(num) :: axis_point, clamped
+    LOGICAL :: log_axis
+
+    log_axis = (table%interpolation == c_interp_log)
 
     ! A flat axis, such as a table with a single ion temperature, has nothing
     ! to interpolate

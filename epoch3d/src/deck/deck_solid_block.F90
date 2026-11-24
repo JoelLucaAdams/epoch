@@ -233,6 +233,29 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'ionisation_table_interpolation') &
+        .OR. str_cmp(element, 'ion_table_interpolation')) THEN
+      IF (str_cmp(value, 'linear')) THEN
+        solid_array(solid_index)%ionisation_table%interpolation = &
+            c_interp_linear
+      ELSE IF (str_cmp(value, 'log')) THEN
+        solid_array(solid_index)%ionisation_table%interpolation = &
+            c_interp_log
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) ''
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised ', TRIM(element), ': ', TRIM(value)
+            WRITE(io,*) 'Code will interpolate this table linearly'
+            WRITE(io,*) ''
+          END DO
+        END IF
+      END IF
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'ion_density') &
         .OR. str_cmp(element, 'rho' ) &
         .OR. str_cmp(element, 'ni')) THEN
@@ -274,6 +297,29 @@ CONTAINS
       CALL get_filename(TRIM(ADJUSTL(value)), filename, got_file, errcode)
       IF (got_file) THEN
         solid_array(solid_index)%resistivity_table%location = filename
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'resistivity_table_interpolation') &
+        .OR. str_cmp(element, 'res_table_interpolation')) THEN
+      IF (str_cmp(value, 'linear')) THEN
+        solid_array(solid_index)%resistivity_table%interpolation = &
+            c_interp_linear
+      ELSE IF (str_cmp(value, 'log')) THEN
+        solid_array(solid_index)%resistivity_table%interpolation = &
+            c_interp_log
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) ''
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised ', TRIM(element), ': ', TRIM(value)
+            WRITE(io,*) 'Code will interpolate this table linearly'
+            WRITE(io,*) ''
+          END DO
+        END IF
       END IF
       RETURN
     END IF

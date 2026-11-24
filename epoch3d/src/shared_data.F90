@@ -725,7 +725,8 @@ MODULE shared_data
     TYPE(lookup_table_axis) :: axes(3)
     REAL(num), ALLOCATABLE :: values(:,:,:)
 
-    LOGICAL :: interp_log = .FALSE. ! interpolate in log10
+    ! c_interp_log or c_interp_linear, set in the deck
+    INTEGER :: interpolation = c_interp_linear
     
     CHARACTER(LEN=12) :: axes_label(3) = '' ! Label for each axis .e.g. rho [kg/m^3]
     LOGICAL :: warn(3) = .TRUE.            ! warn once per axis if clamped
