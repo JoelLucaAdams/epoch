@@ -6,7 +6,7 @@ MODULE hy_tables
     PRIVATE
     PUBLIC :: setup_lookup_tables, interp_trilinear
 
-    CHARACTER(LEN=*), PARAMETER :: default_vti_axes_names(3) = &
+    CHARACTER(LEN=*), PARAMETER :: default_axes_names(3) = &
       (/ 'MassDensity        ', 'ElectronTemperature', 'IonTemperature     ' /)
 
 CONTAINS
@@ -18,11 +18,11 @@ CONTAINS
     DO isolid = 1, solid_count
       IF(solid_array(isolid)%res_model == c_resist_table) &
         CALL load_lookup_table(solid_array(isolid)%resistivity_table, &
-        default_vti_axes_names, 'ElectricalResistivity')
+        default_axes_names, 'ElectricalResistivity')
 
       IF(solid_array(isolid)%ion_model == c_ionisation_table) &
         CALL load_lookup_table(solid_array(isolid)%ionisation_table, &
-            (/default_vti_axes_names(1), default_vti_axes_names(2) /), &
+            (/default_axes_names(1), default_axes_names(2) /), &
             'MeanIonisationState')
 
     END DO
