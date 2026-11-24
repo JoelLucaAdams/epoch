@@ -306,7 +306,7 @@ CONTAINS
 
     ! For each axis, the two neighbouring indices and their weights
     DO i_dim = 1, 3
-        CALL locate(table, points(i_dim), i_dim, fraction_along_axis)
+      CALL locate(table, points(i_dim), i_dim, fraction_along_axis)
 
       idx(:,i_dim) = (/ table%last_index(i_dim), table%last_index(i_dim) + 1 /)
       weights(:,i_dim) = &
@@ -355,8 +355,9 @@ CONTAINS
 
     log_axis = (table%interpolation == c_interp_log)
 
-    ! A flat axis, such as a table with a single ion temperature, has nothing
-    ! to interpolate
+    ! A flat axis, such as a table with a single ion temperature or an axis
+    ! the table doesn't have (see load_lookup_table), has nothing to
+    ! interpolate
     IF (SIZE(table%axes(dim)%values) == 1) THEN
       table%last_index(dim) = 1
       fraction_along_axis = 0.0_num
@@ -365,10 +366,13 @@ CONTAINS
 
     IF (log_axis) THEN
       IF (point <= 0.0_num) THEN
-        PRINT*, '*** ERROR ***'
-        PRINT*, 'Unable to take the log of ', TRIM(table%axes(dim)%name), &
-            ' = ', point, ' in a table lookup'
-        PRINT*, 'Table file: "' // TRIM(table%location) // '"'
+        DO iu = 1, nio_units
+          io = ios_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Unable to take the log of ', &
+              TRIM(table%axes(dim)%name), ' = ', point, ' in a table lookup'
+          WRITE(io,*) 'Table file: "' // TRIM(table%location) // '"'
+        END DO
         CALL abort_code(c_err_bad_value)
       END IF
       axis_point = LOG10(point)
