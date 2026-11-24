@@ -3,8 +3,8 @@ MODULE hy_tables
     USE vti_reader
     IMPLICIT NONE
 
-    ! PRIVATE
-    PUBLIC :: interp_trilinear
+    PRIVATE
+    PUBLIC :: setup_lookup_tables, interp_trilinear
 
     CHARACTER(LEN=*), PARAMETER :: default_vti_axes_names(3) = &
       (/ 'MassDensity        ', 'ElectronTemperature', 'IonTemperature     ' /)
