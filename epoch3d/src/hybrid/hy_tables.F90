@@ -84,7 +84,7 @@ CONTAINS
 
     CALL get_vti_table(table%location, vti, table_value_name, table%values)
 
-  END SUBROUTINE
+  END SUBROUTINE load_table_vti
 
 
 
