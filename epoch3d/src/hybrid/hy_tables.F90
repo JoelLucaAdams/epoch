@@ -22,8 +22,7 @@ CONTAINS
 
       IF(solid_array(isolid)%ion_model == c_ionisation_table) &
         CALL load_lookup_table(solid_array(isolid)%ionisation_table, &
-            (/default_axes_names(1), default_axes_names(2) /), &
-            'MeanIonisationState')
+            default_axes_names(1:2), 'MeanIonisationState')
 
     END DO
 
