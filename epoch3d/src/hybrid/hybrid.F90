@@ -187,9 +187,9 @@ CONTAINS
       DO i_sol = 1, solid_count
         z_real = REAL(solid_array(i_sol)%z, num)
         iex = solid_array(i_sol)%iex
-        hy_sum_ne = hy_sum_ne + solid_array(i_sol)%el_density
 
         solid_array(i_sol)%el_density = z_real * solid_array(i_sol)%ion_density
+        hy_sum_ne = hy_sum_ne + solid_array(i_sol)%el_density
         solid_array(i_sol)%z_prime = z_real**(-4.0_num/3.0_num) *  kelvin_to_ev
         solid_array(i_sol)%iex_term = 2.0_num  / (iex / m0c2)**2
         solid_array(i_sol)%dedx_c = 1.0_num + 2.0_num &
