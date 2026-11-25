@@ -28,9 +28,9 @@ MODULE hy_heating
 
   IMPLICIT NONE
 
-  REAL(num), PRIVATE, ALLOCATABLE :: ohmic_heat_const(:,:,:)
-  REAL(num), PRIVATE, ALLOCATABLE :: ion_heat_const(:,:,:)
-  REAL(num), PRIVATE, ALLOCATABLE :: eff_heat_capacity(:,:,:)
+  ! Inverse volumetric electron heat capacity [K m^3 / J]: the rise in Te per
+  ! unit energy density deposited in a cell. Zero in cells with no solid.
+  REAL(num), PRIVATE, ALLOCATABLE :: inv_vol_heat_cap(:,:,:)
 
   REAL(num), PRIVATE, PARAMETER :: c_hy_equil = &
       2.0_num/3.0_num*(2.0_num*pi*kb)**(-1.5_num) * q0**4 * SQRT(m0)/epsilon0**2
@@ -60,63 +60,56 @@ CONTAINS
     !
     ! Where T' = Z^(-4/3) * Te * kB / q0, as Te in this code is measured in K
     !
-    ! We also calculate the effective heat capacity Sum(ne/C) for compound
-    ! targets, where Sum refers to the sum over all solids in the cell
+    ! For compound targets, the volumetric heat capacity of a cell is
+    ! approximated as kB * [Sum(ne)]**2 / Sum(ne/C), where Sum refers to the sum
+    ! over all solids in the cell. We store the inverse of this, which converts
+    ! a deposited energy density into a rise in Te. It is set to zero in cells
+    ! with no solid, so vacuum cells are never heated.
     !
-    ! Finally, this routine pre-calculates heating constants for different
-    ! heating processes
+    ! All arrays here are recalculated every step and deallocated in
+    ! clear_heat_capacity, so the load balancer never needs to remap them
 
-    REAL(num), ALLOCATABLE :: t_prime(:,:,:), i_kb_sumne2(:,:,:)
-    INTEGER :: i_sol
+    REAL(num), ALLOCATABLE :: t_prime(:,:,:)
+    REAL(num), ALLOCATABLE :: sum_ne(:,:,:), sum_ne_over_c(:,:,:)
+    INTEGER :: i_sol, ix, iy, iz
 
-    ! Temporary varible to store T' array values
     ALLOCATE(t_prime(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(sum_ne(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(sum_ne_over_c(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    sum_ne = 0.0_num
+    sum_ne_over_c = 0.0_num
 
-    ! Cycle through solids and calculate C values
+    ! Cycle through solids and calculate C values, and their contributions to
+    ! Sum(ne) and Sum(ne/C)
     DO i_sol = 1, solid_count
       t_prime = solid_array(i_sol)%z_prime * hy_te
       ALLOCATE(solid_array(i_sol)%heat_capacity(1-ng:nx+ng,1-ng:ny+ng, &
           1-ng:nz+ng))
       solid_array(i_sol)%heat_capacity = 0.3_num + 1.2_num * t_prime &
           * (2.2_num + t_prime)/(1.1_num + t_prime)**2
-    END DO
-
-    ! Deallocate temporary variable t_prime
-    DEALLOCATE(t_prime)
-
-    ! Get effective heat capacity
-    ALLOCATE(eff_heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    eff_heat_capacity = 0.0_num
-    DO i_sol = 1, solid_count
-      eff_heat_capacity = eff_heat_capacity &
+      sum_ne = sum_ne + solid_array(i_sol)%el_density
+      sum_ne_over_c = sum_ne_over_c &
           + solid_array(i_sol)%el_density / solid_array(i_sol)%heat_capacity
     END DO
 
-    ! Get 1/kb/Sum(ne)**2 values
-    ALLOCATE(i_kb_sumne2(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    i_kb_sumne2 = 0.0_num
-    DO i_sol = 1, solid_count
-      i_kb_sumne2 = i_kb_sumne2 + solid_array(i_sol)%el_density
+    ! Inverse volumetric heat capacity, Sum(ne/C) / [Sum(ne)]**2 / kB, avoiding
+    ! the division by zero in vacuum cells
+    ALLOCATE(inv_vol_heat_cap(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    DO iz = 1-ng, nz+ng
+      DO iy = 1-ng, ny+ng
+        DO ix = 1-ng, nx+ng
+          IF (sum_ne(ix,iy,iz) > c_tiny) THEN
+            inv_vol_heat_cap(ix,iy,iz) = &
+                (sum_ne_over_c(ix,iy,iz) / sum_ne(ix,iy,iz)) &
+                / (kb * sum_ne(ix,iy,iz))
+          ELSE
+            inv_vol_heat_cap(ix,iy,iz) = 0.0_num
+          END IF
+        END DO
+      END DO
     END DO
-    i_kb_sumne2 = 1.0_num/(kb*i_kb_sumne2**2)
 
-    ! Precalculate the ion_heat_const array if ionisation loss is running
-    IF (use_hybrid_collisions) THEN
-      IF (.NOT. ALLOCATED(ion_heat_const)) THEN
-        ALLOCATE(ion_heat_const(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-        ion_heat_const = i_kb_sumne2 * idx * idy * idz
-      END IF
-    END IF
-
-    ! Precalculate the ohmic_heat_const array if Ohmic heating is running
-    IF (use_ohmic) THEN
-      IF (.NOT. ALLOCATED(ohmic_heat_const)) THEN
-        ALLOCATE(ohmic_heat_const(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-        ohmic_heat_const = dt * i_kb_sumne2
-      END IF
-    END IF
-
-    DEALLOCATE(i_kb_sumne2)
+    DEALLOCATE(t_prime, sum_ne, sum_ne_over_c)
 
   END SUBROUTINE get_heat_capacity
 
@@ -125,29 +118,21 @@ CONTAINS
   SUBROUTINE ionisation_heating(de, part_x, part_y, part_z)
 
     ! The current particle has deposited energy dE into the solid, at position
-    ! (part_x, part_y, part_z), due to ionisation energy loss. By finding the
-    ! heat capacity at that point, this is converted to a temperature increase.
-    !
-    ! The temperature rise of a compound solid will be approximated to:
+    ! (part_x, part_y, part_z), due to ionisation energy loss. The energy is
+    ! given to the cell containing the particle (ignoring particle shape), and
+    ! converted to a temperature increase using that cell's heat capacity:
     !
     ! dT = (Energy change per unit vol.) * Sum(ne/C) / [Sum(ne)]**2 / kB
     !
-    ! ion_heat_const = 1 / kB / sum(ne**2) / (cell vol.)
-    ! eff_heat_capacity = sum(ne/C)
+    ! Using the heat capacity of the cell which receives the energy (rather
+    ! than one interpolated over the particle shape) conserves energy, and
+    ! avoids sampling the undefined heat capacity of neighbouring vacuum cells.
+    ! Energy deposited in a vacuum cell is lost.
 
     REAL(num), INTENT(IN) :: de, part_x, part_y, part_z
     INTEGER :: ix, iy, iz
-    REAL(num) :: part_c_eff, part_heat_const, delta_te
 
-    CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, &
-        part_heat_const, ion_heat_const)
-    CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, &
-        part_c_eff, eff_heat_capacity)
-
-    ! Calculate the temperature increase, and add this to Te
-    delta_te = de * part_c_eff * part_heat_const
-
-    ! Write temperature change to the grid (to current cell only, ignores shape)
+    ! Find the cell containing the particle
 #ifdef PARTICLE_SHAPE_TOPHAT
     ix = FLOOR(part_x * idx) + 1
     iy = FLOOR(part_y * idy) + 1
@@ -157,7 +142,11 @@ CONTAINS
     iy = FLOOR(part_y * idy + 0.5_num) + 1
     iz = FLOOR(part_z * idz + 0.5_num) + 1
 #endif
-    hy_te(ix,iy,iz) = hy_te(ix,iy,iz) + delta_te
+
+    ! Convert deposited energy to energy density, and add the resulting
+    ! temperature increase to Te
+    hy_te(ix,iy,iz) = hy_te(ix,iy,iz) &
+        + de * idx * idy * idz * inv_vol_heat_cap(ix,iy,iz)
 
   END SUBROUTINE ionisation_heating
 
@@ -172,10 +161,9 @@ CONTAINS
     ! the timestep, we have a power disspiation of R*I**2, which is equivalent
     ! to a power density of J**2.(resistivity)
     !
-    !  dt = (Power density) * dt  * Sum(ne/C) / [Sum(ne)]**2 / kB
+    !  dT = (Power density) * dt  * Sum(ne/C) / [Sum(ne)]**2 / kB
     !
-    ! ohmic_heat_const = dt / kB / Sum(ne)**2
-    ! eff_heat_capacity = sum(ne/C)
+    ! inv_vol_heat_cap = Sum(ne/C) / [Sum(ne)]**2 / kB
 
     REAL(num) :: j2
     INTEGER :: ix, iy, iz
@@ -190,11 +178,11 @@ CONTAINS
               + (jby(ix,iy,iz) + jby(ix,iy-1,iz))**2 &
               + (jbz(ix,iy,iz) + jbz(ix,iy,iz-1))**2)
 
-          ! Calculate Ohmic heating, avoiding the 0/0 NaN
-          IF (eff_heat_capacity(ix,iy,iz) > 0.0_num) THEN
+          ! Calculate Ohmic heating, skipping vacuum cells (where resistivity
+          ! may be infinite, giving an Inf*0 NaN)
+          IF (inv_vol_heat_cap(ix,iy,iz) > 0.0_num) THEN
             hy_te(ix,iy,iz) = hy_te(ix,iy,iz) &
-                + j2*resistivity(ix,iy,iz)*ohmic_heat_const(ix,iy,iz) &
-                * eff_heat_capacity(ix,iy,iz)
+                + j2 * resistivity(ix,iy,iz) * dt * inv_vol_heat_cap(ix,iy,iz)
           END IF
         END DO
       END DO
@@ -206,8 +194,8 @@ CONTAINS
 
   SUBROUTINE clear_heat_capacity
 
-    ! De-allocate the heat capacity in each solid. This array is recalculated
-    ! each time-step anyway, so there's no need to save and resize it in the
+    ! De-allocate the heat capacity arrays. These are recalculated each
+    ! time-step anyway, so there's no need to save and resize them in the
     ! load balancer
 
     INTEGER :: i_sol
@@ -215,7 +203,7 @@ CONTAINS
     DO i_sol = 1, solid_count
       DEALLOCATE(solid_array(i_sol)%heat_capacity)
     END DO
-    DEALLOCATE(eff_heat_capacity)
+    DEALLOCATE(inv_vol_heat_cap)
 
     ! Pass new temperature values to ghost cells of neighbouring processors
     CALL field_bc(hy_te, ng)
