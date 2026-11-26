@@ -741,6 +741,7 @@ MODULE shared_data
     INTEGER :: z = -1
     INTEGER :: res_model = c_resist_vacuum
     INTEGER :: ion_model = c_thomas_fermi
+    INTEGER :: hc_model = c_hc_davies
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
     ! A Resistivity lookup table should contain the values of resistivity
@@ -754,10 +755,15 @@ MODULE shared_data
     ! and it's atomic number Z.
     TYPE(lookup_table) :: ionisation_table
 
+    ! A Heat Capacity lookup table should contain the volumetric electron heat
+    ! capacity [J/K/m^3], the energy per unit volume needed to raise the
+    ! electron temperature by 1 K, for a given mass density [kg/m^3] and
+    ! electron temperature [K]. They must be positive values.
+    TYPE(lookup_table) :: heat_capacity_table
+
     ! Derived variables
     REAL(num) :: theta_fac, ln_s, z_prime
     REAL(num) :: iex_term, dedx_c
-    REAL(num), ALLOCATABLE :: heat_capacity(:,:,:)
 
   END TYPE solid
 

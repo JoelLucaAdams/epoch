@@ -532,7 +532,7 @@ helper.o: helper.F90 balance.o boundary.o deltaf_loader.o partlist.o simple_io.o
 hy_tables.o: hy_tables.F90 vti_reader.o hy_shared.o
 hy_elastic.o: hy_elastic.F90 particles.o hy_shared.o
 hy_fields.o: hy_fields.F90 hy_shared.o
-hy_heating.o: hy_heating.F90 hy_shared.o
+hy_heating.o: hy_heating.F90 hy_shared.o hy_tables.o
 hy_ionisation_loss.o: hy_ionisation_loss.F90 hy_heating.o hy_shared.o \
 	particles.o partlist.o calc_df.o
 hy_laser.o: hy_laser.F90 evaluate.o particles.o partlist.o

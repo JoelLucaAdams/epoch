@@ -260,6 +260,10 @@ MODULE constants
   INTEGER, PARAMETER :: c_thomas_fermi = 1
   INTEGER, PARAMETER :: c_ionisation_table = 2
 
+  ! Hybrid Heat Capacity models
+  INTEGER, PARAMETER :: c_hc_davies = 1
+  INTEGER, PARAMETER :: c_hc_table = 2
+
   ! Hybrid lookup table interpolation methods
   INTEGER, PARAMETER :: c_interp_linear = 1
   INTEGER, PARAMETER :: c_interp_log = 2

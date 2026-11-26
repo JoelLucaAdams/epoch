@@ -49,6 +49,10 @@ CONTAINS
         CALL load_lookup_table(solid_array(isolid)%ionisation_table, &
             default_axes_names(1:2), 'MeanIonisationState')
 
+      IF(solid_array(isolid)%hc_model == c_hc_table) &
+        CALL load_lookup_table(solid_array(isolid)%heat_capacity_table, &
+            default_axes_names(1:2), 'IsochoricSpecificHeatCapacity')
+        
     END DO
 
   END SUBROUTINE setup_lookup_tables

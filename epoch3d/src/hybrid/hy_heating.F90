@@ -25,6 +25,7 @@ MODULE hy_heating
 #ifdef HYBRID
 
   USE hy_shared
+  USE hy_tables
 
   IMPLICIT NONE
 
@@ -53,43 +54,69 @@ CONTAINS
 
   SUBROUTINE get_heat_capacity
 
-    ! Calculates heat capacity as described by Davies, et al, (2002). Phys. Rev.
-    ! E, 65(2), 026407, for each element of solid_array
+    ! Calculates the inverse volumetric electron heat capacity of each cell.
+    ! Each solid has a heat capacity per electron C, in units of kB, from the
+    ! model set by heat_capacity_model in its solid block:
     !
-    ! C = 0.3 + 1.2*T'*(2.2 + T')/(1.1 + T')^2
+    !   davies (default): the fit of Davies, et al, (2002). Phys. Rev. E,
+    !     65(2), 026407
+    !     C = 0.3 + 1.2*T'*(2.2 + T')/(1.1 + T')^2
+    !     Where T' = Z^(-4/3) * Te * kB / q0, as Te in this code is in K
     !
-    ! Where T' = Z^(-4/3) * Te * kB / q0, as Te in this code is measured in K
+    !   table: the solid's heat capacity table gives its volumetric electron
+    !     heat capacity C_V = kB*ne*C [J/K/m^3] at the solid's mass density
+    !     [kg/m^3] and Te [K]
     !
     ! For compound targets, the volumetric heat capacity of a cell is
     ! approximated as kB * [Sum(ne)]**2 / Sum(ne/C), where Sum refers to the sum
-    ! over all solids in the cell. We store the inverse of this, which converts
-    ! a deposited energy density into a rise in Te. It is set to zero in cells
-    ! with no solid, so vacuum cells are never heated.
+    ! over all solids in the cell. For a table, ne/C = kB*ne**2/C_V. We store
+    ! the inverse of this, which converts a deposited energy density into a
+    ! rise in Te. It is set to zero in cells with no solid, so vacuum cells are
+    ! never heated.
     !
     ! All arrays here are recalculated every step and deallocated in
     ! clear_heat_capacity, so the load balancer never needs to remap them
 
-    REAL(num), ALLOCATABLE :: t_prime(:,:,:)
     REAL(num), ALLOCATABLE :: sum_ne(:,:,:), sum_ne_over_c(:,:,:)
+    REAL(num) :: ne, t_prime, c, rho_mass, cv
     INTEGER :: i_sol, ix, iy, iz
 
-    ALLOCATE(t_prime(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
     ALLOCATE(sum_ne(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
     ALLOCATE(sum_ne_over_c(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
     sum_ne = 0.0_num
     sum_ne_over_c = 0.0_num
 
-    ! Cycle through solids and calculate C values, and their contributions to
-    ! Sum(ne) and Sum(ne/C)
+    ! Cycle through solids and add their contributions to Sum(ne) and
+    ! Sum(ne/C). A solid with no electrons in a cell adds nothing there, so its
+    ! table is never looked up at zero density
     DO i_sol = 1, solid_count
-      t_prime = solid_array(i_sol)%z_prime * hy_te
-      ALLOCATE(solid_array(i_sol)%heat_capacity(1-ng:nx+ng,1-ng:ny+ng, &
-          1-ng:nz+ng))
-      solid_array(i_sol)%heat_capacity = 0.3_num + 1.2_num * t_prime &
-          * (2.2_num + t_prime)/(1.1_num + t_prime)**2
-      sum_ne = sum_ne + solid_array(i_sol)%el_density
-      sum_ne_over_c = sum_ne_over_c &
-          + solid_array(i_sol)%el_density / solid_array(i_sol)%heat_capacity
+      ASSOCIATE (sol => solid_array(i_sol))
+        DO iz = 1-ng, nz+ng
+          DO iy = 1-ng, ny+ng
+            DO ix = 1-ng, nx+ng
+
+              ne = sol%el_density(ix,iy,iz)
+              IF (ne <= 0.0_num) CYCLE
+              sum_ne(ix,iy,iz) = sum_ne(ix,iy,iz) + ne
+
+              ! Table lookup
+              IF (sol%hc_model == c_hc_table) THEN
+                rho_mass = sol%ion_density(ix,iy,iz) * sol%mass_no * amu
+                cv = interp_trilinear(sol%heat_capacity_table, &
+                    (/ rho_mass, hy_te(ix,iy,iz), 0.0_num /))
+                sum_ne_over_c(ix,iy,iz) = sum_ne_over_c(ix,iy,iz) &
+                    + kb * ne**2 / cv
+              ELSE
+                ! Davies fit
+                t_prime = sol%z_prime * hy_te(ix,iy,iz)
+                c = 0.3_num + 1.2_num * t_prime &
+                    * (2.2_num + t_prime)/(1.1_num + t_prime)**2
+                sum_ne_over_c(ix,iy,iz) = sum_ne_over_c(ix,iy,iz) + ne / c
+              END IF
+            END DO
+          END DO
+        END DO
+      END ASSOCIATE
     END DO
 
     ! Inverse volumetric heat capacity, Sum(ne/C) / [Sum(ne)]**2 / kB, avoiding
@@ -109,7 +136,7 @@ CONTAINS
       END DO
     END DO
 
-    DEALLOCATE(t_prime, sum_ne, sum_ne_over_c)
+    DEALLOCATE(sum_ne, sum_ne_over_c)
 
   END SUBROUTINE get_heat_capacity
 
@@ -194,15 +221,9 @@ CONTAINS
 
   SUBROUTINE clear_heat_capacity
 
-    ! De-allocate the heat capacity arrays. These are recalculated each
-    ! time-step anyway, so there's no need to save and resize them in the
-    ! load balancer
+    ! De-allocate the heat capacity array. This is recalculated each time-step
+    ! anyway, so there's no need to save and resize it in the load balancer
 
-    INTEGER :: i_sol
-
-    DO i_sol = 1, solid_count
-      DEALLOCATE(solid_array(i_sol)%heat_capacity)
-    END DO
     DEALLOCATE(inv_vol_heat_cap)
 
     ! Pass new temperature values to ghost cells of neighbouring processors
