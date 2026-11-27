@@ -170,10 +170,9 @@ CONTAINS
     ! This subroutine initialises the hybrid arrays, and sets the values of some
     ! constants, to speed up the code
 
-    REAL(num) :: max_ne, z_real, iex
-    INTEGER :: ix, iy, iz, i_sol, io, iu
-    LOGICAL :: sendbuf(2), recvbuf(2)
-    INTEGER :: err
+    REAL(num) :: z_real, iex
+    REAL(num), ALLOCATABLE :: sum_ni(:,:,:)
+    INTEGER :: i_sol, io, iu
 
     IF (use_hybrid) THEN
 
@@ -224,54 +223,41 @@ CONTAINS
       ! extra remapping scripts in balance.F90 (for domain change in
       ! load-balance)
       ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-      ALLOCATE(resistivity_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-      ALLOCATE(solid_index_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-      ALLOCATE(ionisation_model(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
-      ! Assign a resistivity model to each cell based on present solids
-      ! (default to vacuum)
-      resistivity_model = c_resist_vacuum
-      ionisation_model = c_thomas_fermi
-      solid_index_model = 0
-      DO iz = 1-ng, nz+ng
-        DO iy = 1-ng, ny+ng
-          DO ix = 1-ng, nx+ng
+      ! Weight each solid by its fraction of the ions in each cell. Cells with
+      ! several solids take the weighted mean of each solid's ionisation,
+      ! resistivity and energy exchange. The ion densities never change, so
+      ! the weights are only calculated here (balance.F90 remaps them)
+      ALLOCATE(sum_ni(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
-            ! Use the same resistivity model as the solid with the highest
-            ! local electron number density
-            max_ne = 0.0_num
-            DO i_sol = 1, solid_count
-              IF (solid_array(i_sol)%el_density(ix,iy,iz) > max_ne) THEN
-                max_ne = solid_array(i_sol)%el_density(ix,iy,iz)
-                resistivity_model(ix,iy,iz) = solid_array(i_sol)%res_model
-                ionisation_model(ix,iy,iz) = solid_array(i_sol)%ion_model
-                solid_index_model(ix,iy,iz) = i_sol
-              END IF
-            END DO
-
-            ! Do we need ionisation and Coulomb logarithm scripts?
-            ! If using Lee-More resistivity or lookup table
-            IF (resistivity_model(ix,iy,iz) == c_resist_rlm &
-                .OR. resistivity_model(ix,iy,iz) == c_resist_table) THEN
-              use_hy_cou_log = .TRUE.
-              use_hy_ionisation = .TRUE.
-            END IF
-
-            ! An ionisation table is only used if the ionisation is updated
-            IF (ionisation_model(ix,iy,iz) == c_ionisation_table) &
-                use_hy_ionisation = .TRUE.
-
-          END DO
-        END DO
+      sum_ni = 0.0_num
+      DO i_sol = 1, solid_count
+        sum_ni = sum_ni + solid_array(i_sol)%ion_density
       END DO
 
-      ! If one processor needs to calculate a Coulomb logarithm and deal with
-      ! background ionisation, then all processors must
-      sendbuf(1) = use_hy_cou_log
-      sendbuf(2) = use_hy_ionisation
-      CALL MPI_ALLREDUCE(sendbuf, recvbuf, 2, MPI_LOGICAL, MPI_LOR, comm, err)
-      use_hy_cou_log = recvbuf(1)
-      use_hy_ionisation = recvbuf(2)
+      DO i_sol = 1, solid_count
+        ALLOCATE(solid_array(i_sol)%weight(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+        WHERE (sum_ni > 0.0_num)
+          solid_array(i_sol)%weight = solid_array(i_sol)%ion_density / sum_ni
+        ELSEWHERE
+          solid_array(i_sol)%weight = 0.0_num
+        END WHERE
+      END DO
+
+      DEALLOCATE(sum_ni)
+
+      ! Lee-More and table resistivities need the ionisation and Coulomb
+      ! logarithm, and an ionisation table is only used if the ionisation is
+      ! updated
+      DO i_sol = 1, solid_count
+        IF (solid_array(i_sol)%res_model == c_resist_rlm &
+            .OR. solid_array(i_sol)%res_model == c_resist_table) THEN
+          use_hy_cou_log = .TRUE.
+          use_hy_ionisation = .TRUE.
+        END IF
+        IF (solid_array(i_sol)%ion_model == c_ionisation_table) &
+            use_hy_ionisation = .TRUE.
+      END DO
 
       ! Allocate additional arrays for extra physics processes
       IF (use_hy_ionisation) THEN
@@ -345,12 +331,12 @@ CONTAINS
     ! Solids
     DO i_sol = 1, solid_count
       DEALLOCATE(solid_array(i_sol)%ion_density, solid_array(i_sol)% el_density)
+      DEALLOCATE(solid_array(i_sol)%weight)
     END DO
     DEALLOCATE(solid_array)
 
     ! Global arrays
-    DEALLOCATE(hy_te, resistivity, resistivity_model, solid_index_model, &
-        hy_sum_ne, ionisation_model)
+    DEALLOCATE(hy_te, resistivity, hy_sum_ne)
     DEALLOCATE(jbx, jby, jbz)
 
     ! Ionisation/resistivity optional arrays

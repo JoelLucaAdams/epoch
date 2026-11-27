@@ -745,6 +745,11 @@ MODULE shared_data
     INTEGER :: exchange_model = c_exchange_spitzer
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
+    ! This solid's fraction of the ions in each cell, n_i / Sum(n_i), or 0 in
+    ! cells with no solid. Cells with several solids take the weighted mean of
+    ! each solid's ionisation, resistivity and energy exchange
+    REAL(num), ALLOCATABLE :: weight(:,:,:)
+
     ! A Resistivity lookup table should contain the values of resistivity
     ! for a given mass density [kg/m^3], electron temperature [K] 
     ! and ion temperature [K]
@@ -786,8 +791,6 @@ MODULE shared_data
   ! Global background arrays
   REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: hy_sum_ne, resistivity, hy_te
   REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: jbx, jby, jbz
-  INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: resistivity_model, solid_index_model
-  INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: ionisation_model
 
   ! Fit variables for the reduced Lee-More model (initial values for Al)
   REAL(num) :: rlm_1 = 7.0_num

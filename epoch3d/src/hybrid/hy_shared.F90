@@ -92,5 +92,26 @@ CONTAINS
 
   END SUBROUTINE hy_grid_centred_var_at_particle
 
+
+
+  FUNCTION cell_mass_density(ix, iy, iz)
+
+    ! Total mass density [kg/m^3] of all the solids in a cell. Each solid's
+    ! lookup tables are read at this density times the solid's weight (its
+    ! fraction of the cell's ions)
+
+    INTEGER, INTENT(IN) :: ix, iy, iz
+    REAL(num) :: cell_mass_density
+    INTEGER :: i_sol
+
+    cell_mass_density = 0.0_num
+    DO i_sol = 1, solid_count
+      cell_mass_density = cell_mass_density &
+          + solid_array(i_sol)%ion_density(ix,iy,iz) &
+          * solid_array(i_sol)%mass_no * amu
+    END DO
+
+  END FUNCTION cell_mass_density
+
 #endif
 END MODULE hy_shared

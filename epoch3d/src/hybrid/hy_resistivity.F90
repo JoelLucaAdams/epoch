@@ -40,20 +40,31 @@ CONTAINS
   SUBROUTINE update_ionisation
 
     ! Loops over all cells and updates the ionisation charge state of the
-    ! background solid. In the case of compound solids, the ion properties are
-    ! averaged over species
+    ! background solid. Each solid in a cell gives its ionisation from its own
+    ! ion_model, and the cell takes their mean, weighted by each solid's
+    ! fraction of the cell's ions (solid%weight). Cells with no solid have no
+    ! ionisation
 
-    INTEGER :: ix, iy, iz
+    INTEGER :: ix, iy, iz, i_sol
+    REAL(num) :: weight, rho_mass, z_star
 
     DO iz = 1-ng, nz+ng
       DO iy = 1-ng, ny+ng
         DO ix = 1-ng, nx+ng
-          SELECT CASE (ionisation_model(ix,iy,iz))
-          CASE(c_thomas_fermi)
-            ion_charge(ix,iy,iz) = thomas_fermi_ionisation(ix,iy,iz)
-          CASE(c_ionisation_table)
-            ion_charge(ix,iy,iz) = calc_ionisation_table(ix,iy,iz)
-          END SELECT
+          rho_mass = cell_mass_density(ix,iy,iz)
+          ion_charge(ix,iy,iz) = 0.0_num
+          DO i_sol = 1, solid_count
+            weight = solid_array(i_sol)%weight(ix,iy,iz)
+            IF (weight <= 0.0_num) CYCLE
+            SELECT CASE (solid_array(i_sol)%ion_model)
+            CASE(c_thomas_fermi)
+              z_star = thomas_fermi_ionisation(ix,iy,iz)
+            CASE(c_ionisation_table)
+              z_star = calc_ionisation_table(i_sol, weight * rho_mass, &
+                  ix, iy, iz)
+            END SELECT
+            ion_charge(ix,iy,iz) = ion_charge(ix,iy,iz) + weight * z_star
+          END DO
         END DO
       END DO
     END DO
@@ -84,26 +95,37 @@ CONTAINS
 
   SUBROUTINE update_resistivity
 
-    ! Loops over the resistivity grid and updates each point based on the
-    ! resistivity model in that cell
+    ! Loops over the resistivity grid. Each solid in a cell gives its
+    ! resistivity from its own res_model, and the cell takes their mean,
+    ! weighted by each solid's fraction of the cell's ions (solid%weight).
+    ! Cells with no solid are vacuum, with zero resistivity
 
-    INTEGER :: ix, iy, iz
+    INTEGER :: ix, iy, iz, i_sol
+    REAL(num) :: weight, rho_mass, eta
 
     DO iz = 1-ng, nz+ng
       DO iy = 1-ng, ny+ng
         DO ix = 1-ng, nx+ng
-          SELECT CASE (resistivity_model(ix,iy,iz))
-          CASE(c_resist_vacuum)
-            resistivity(ix,iy,iz) = 0.0_num
-          CASE(c_resist_milchberg)
-            resistivity(ix,iy,iz) = calc_resistivity_milchberg(hy_te(ix,iy,iz))
-          CASE(c_resist_plastic)
-            resistivity(ix,iy,iz) = calc_resistivity_plastic(hy_te(ix,iy,iz))
-          CASE(c_resist_rlm)
-            resistivity(ix,iy,iz) = calc_resistivity_rlm(ix,iy,iz)
-          CASE(c_resist_table)
-            resistivity(ix,iy,iz) = calc_resistivity_table(ix,iy,iz)
-          END SELECT
+          rho_mass = cell_mass_density(ix,iy,iz)
+          resistivity(ix,iy,iz) = 0.0_num
+          DO i_sol = 1, solid_count
+            weight = solid_array(i_sol)%weight(ix,iy,iz)
+            IF (weight <= 0.0_num) CYCLE
+            SELECT CASE (solid_array(i_sol)%res_model)
+            CASE(c_resist_vacuum)
+              eta = 0.0_num
+            CASE(c_resist_milchberg)
+              eta = calc_resistivity_milchberg(hy_te(ix,iy,iz))
+            CASE(c_resist_plastic)
+              eta = calc_resistivity_plastic(hy_te(ix,iy,iz))
+            CASE(c_resist_rlm)
+              eta = calc_resistivity_rlm(ix,iy,iz)
+            CASE(c_resist_table)
+              eta = calc_resistivity_table(i_sol, weight * rho_mass, &
+                  ix, iy, iz)
+            END SELECT
+            resistivity(ix,iy,iz) = resistivity(ix,iy,iz) + weight * eta
+          END DO
         END DO
       END DO
     END DO
@@ -204,25 +226,20 @@ CONTAINS
 
 
 
-  FUNCTION calc_resistivity_table(ix, iy, iz)
+  FUNCTION calc_resistivity_table(i_sol, rho_mass, ix, iy, iz)
 
-    ! Calculates resistivity using trilinear interpolation on the table loaded
-    ! for the dominant solid at this cell. The dominant solid index is stored in
-    ! solid_index_model, set once at initialisation alongside resistivity_model,
-    ! using the same highest-electron-density criterion. The table is
-    ! interpolated in log10 or linearly, as set in the deck by
-    ! resistivity_table_interpolation. Out of range warnings are given once per
-    ! axis for each solid.
+    ! Calculates the resistivity of solid i_sol using trilinear interpolation
+    ! on its table, at the cell's total mass density rho_mass [kg/m^3] (see
+    ! cell_mass_density), Te and Ti. The table is interpolated in log10 or
+    ! linearly, as set in the deck by resistivity_table_interpolation. Out of
+    ! range warnings are given once per axis for each solid.
 
-    INTEGER, INTENT(IN) :: ix, iy, iz
+    INTEGER, INTENT(IN) :: i_sol, ix, iy, iz
+    REAL(num), INTENT(IN) :: rho_mass
     REAL(num) :: calc_resistivity_table
 
-    INTEGER :: i_sol
-    REAL(num) :: rho_mass, te, ti
+    REAL(num) :: te, ti
 
-    i_sol = solid_index_model(ix,iy,iz)
-    rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
-        * solid_array(i_sol)%mass_no * amu
     te = hy_te(ix,iy,iz)
     IF (use_ion_temp) THEN
       ti = hy_ti(ix,iy,iz)
@@ -237,24 +254,19 @@ CONTAINS
 
 
 
-   FUNCTION calc_ionisation_table(ix, iy, iz)
+  FUNCTION calc_ionisation_table(i_sol, rho_mass, ix, iy, iz)
 
-    ! Calculates ionisation using trilinear interpolation on the table loaded
-    ! for the dominant solid at this cell. The dominant solid index is stored in
-    ! solid_index_model, set once at initialisation alongside ionisation_model,
-    ! using the same highest-electron-density criterion. The table is
-    ! interpolated in log10 or linearly, as set in the deck by
-    ! ionisation_table_interpolation.
+    ! Calculates the ionisation of solid i_sol using trilinear interpolation
+    ! on its table, at the cell's total mass density rho_mass [kg/m^3] (see
+    ! cell_mass_density) and Te. The table is interpolated in log10 or
+    ! linearly, as set in the deck by ionisation_table_interpolation.
 
-    INTEGER, INTENT(IN) :: ix, iy, iz
+    INTEGER, INTENT(IN) :: i_sol, ix, iy, iz
+    REAL(num), INTENT(IN) :: rho_mass
     REAL(num) :: calc_ionisation_table
 
-    INTEGER :: i_sol
-    REAL(num) :: rho_mass, te
+    REAL(num) :: te
 
-    i_sol = solid_index_model(ix,iy,iz)
-    rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
-        * solid_array(i_sol)%mass_no * amu
     te = hy_te(ix,iy,iz)
 
     calc_ionisation_table = interp_trilinear( &

@@ -484,7 +484,6 @@ CONTAINS
     REAL(num), DIMENSION(:,:,:,:), ALLOCATABLE :: temp_sum
     REAL(r4), DIMENSION(:,:,:,:), ALLOCATABLE :: r4temp_sum
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: temp, temp2
-    INTEGER, DIMENSION(:,:,:), ALLOCATABLE :: temp_int
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: temp_slice
     TYPE(laser_block), POINTER :: laser, laser_next
     TYPE(injector_block), POINTER :: injector, injector_next
@@ -508,7 +507,6 @@ CONTAINS
     ! Full domain arrays
 
     ALLOCATE(temp(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
-    ALLOCATE(temp_int(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
 
     ! Current will be recalculated during the particle push, so there
     ! is no need to copy the contents of the old arrays.
@@ -589,24 +587,6 @@ CONTAINS
       DEALLOCATE(resistivity)
       ALLOCATE(resistivity(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
       resistivity = temp
-
-      CALL remap_field_int(resistivity_model, temp_int)
-      DEALLOCATE(resistivity_model)
-      ALLOCATE(resistivity_model(1-ng:nx_new+ng, 1-ng:ny_new+ng, &
-          1-ng:nz_new+ng))
-      resistivity_model = temp_int
-
-      CALL remap_field_int(ionisation_model, temp_int)
-      DEALLOCATE(ionisation_model)
-      ALLOCATE(ionisation_model(1-ng:nx_new+ng, 1-ng:ny_new+ng, &
-          1-ng:nz_new+ng))
-      ionisation_model = temp_int
-
-      CALL remap_field_int(solid_index_model, temp_int)
-      DEALLOCATE(solid_index_model)
-      ALLOCATE(solid_index_model(1-ng:nx_new+ng, 1-ng:ny_new+ng, &
-          1-ng:nz_new+ng))
-      solid_index_model = temp_int
 
       CALL remap_field(hy_te, temp)
       DEALLOCATE(hy_te)
@@ -690,6 +670,12 @@ CONTAINS
         ALLOCATE(solid_array(isolid)%el_density(1-ng:nx_new+ng, &
             1-ng:ny_new+ng, 1-ng:nz_new+ng))
         solid_array(isolid)%el_density = temp
+
+        CALL remap_field(solid_array(isolid)%weight, temp)
+        DEALLOCATE(solid_array(isolid)%weight)
+        ALLOCATE(solid_array(isolid)%weight(1-ng:nx_new+ng, &
+            1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        solid_array(isolid)%weight = temp
       END DO
     END IF
 #endif
