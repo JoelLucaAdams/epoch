@@ -221,13 +221,11 @@ CONTAINS
 
   SUBROUTINE clear_heat_capacity
 
-    ! De-allocate the heat capacity array. This is recalculated each time-step
-    ! anyway, so there's no need to save and resize it in the load balancer
+    ! De-allocate the heat capacity array, once heating and thermal
+    ! equilibration have used it. This is recalculated each time-step anyway,
+    ! so there's no need to save and resize it in the load balancer
 
     DEALLOCATE(inv_vol_heat_cap)
-
-    ! Pass new temperature values to ghost cells of neighbouring processors
-    CALL field_bc(hy_te, ng)
 
   END SUBROUTINE clear_heat_capacity
 
@@ -249,36 +247,67 @@ CONTAINS
     !
     ! For reference:
     ! c_hy_equil = 2/3 * (2*pi*kb)**-3/2 * q0**4 * SQRT(m0)/eps0**2
+    !
+    ! A cell whose dominant solid sets energy_exchange_model = table instead
+    ! takes the exchange power Q [W/m^3] from that solid's table. Q*dt flows
+    ! from the hotter species to the colder one (so the sign of Q is ignored),
+    ! capped at the amount that brings both to the same temperature. It is
+    ! converted to temperature changes with the electron heat capacity used for
+    ! heating (inv_vol_heat_cap) and an ideal-gas ion heat capacity, 3/2*kB*ni
 
-    INTEGER :: ix, iy, iz
+    INTEGER :: ix, iy, iz, i_sol
     REAL(num) :: eq_zst, eq_cou_log, eq_a, eq_te, eq_ti, eq_ni, eq_mi
     REAL(num) :: temp_diff, eq_term, dte_fac, dti_fac
+    REAL(num) :: rho_mass, inv_cv_e, inv_cv_i, e_ex
 
     DO iz = 1,nz
       DO iy = 1,ny
         DO ix = 1,nx
 
+          ! No exchange in cells with no solid
+          i_sol = solid_index_model(ix,iy,iz)
+          IF (i_sol == 0) CYCLE
+
           ! Copy out grid variables for clarity
-          eq_zst = ion_charge(ix,iy,iz)
-          eq_cou_log = ion_cou_log(ix,iy,iz)
-          eq_a = ion_a(ix,iy,iz)
           eq_te = hy_te(ix,iy,iz)
           eq_ti = hy_ti(ix,iy,iz)
-          eq_ni = ion_ni(ix,iy,iz)
-          eq_mi = eq_a * amu
-
           temp_diff = eq_ti - eq_te
-          eq_term = c_hy_equil * eq_ni * eq_cou_log &
-              * SQRT(eq_mi/(eq_te*eq_mi + eq_ti*m0)**3)
 
-          ! To prevent over-shooting, cap the temperature change at half the
-          ! temperature difference
-          dte_fac = MIN(dt * eq_term * eq_zst**2, 0.5_num)
-          dti_fac = MIN(dt * eq_term * eq_zst**3, 0.5_num)
+          IF (solid_array(i_sol)%exchange_model == c_exchange_table) THEN
+            rho_mass = solid_array(i_sol)%ion_density(ix,iy,iz) &
+                * solid_array(i_sol)%mass_no * amu
 
-          ! Apply temperature change
-          hy_te(ix,iy,iz) = eq_te + dte_fac * temp_diff
-          hy_ti(ix,iy,iz) = eq_ti - dti_fac * temp_diff
+            ! Inverse volumetric heat capacities [K m^3 / J]
+            inv_cv_e = inv_vol_heat_cap(ix,iy,iz)
+            inv_cv_i = 1.0_num / (1.5_num * kb * ion_ni(ix,iy,iz))
+
+            ! Energy per unit volume given to the electrons [J/m^3]
+            e_ex = SIGN(MIN(dt * ABS(interp_trilinear( &
+                solid_array(i_sol)%exchange_table, &
+                (/ rho_mass, eq_te, eq_ti /))), &
+                ABS(temp_diff) / (inv_cv_e + inv_cv_i)), temp_diff)
+
+            hy_te(ix,iy,iz) = eq_te + e_ex * inv_cv_e
+            hy_ti(ix,iy,iz) = eq_ti - e_ex * inv_cv_i
+          ELSE
+            eq_zst = ion_charge(ix,iy,iz)
+            eq_cou_log = ion_cou_log(ix,iy,iz)
+            eq_a = ion_a(ix,iy,iz)
+            eq_ni = ion_ni(ix,iy,iz)
+            eq_mi = eq_a * amu
+
+            eq_term = c_hy_equil * eq_ni * eq_cou_log &
+                * SQRT(eq_mi/(eq_te*eq_mi + eq_ti*m0)**3)
+
+            ! To prevent over-shooting, cap the temperature change at half the
+            ! temperature difference
+            dte_fac = MIN(dt * eq_term * eq_zst**2, 0.5_num)
+            dti_fac = MIN(dt * eq_term * eq_zst**3, 0.5_num)
+
+            ! Apply temperature change
+            hy_te(ix,iy,iz) = eq_te + dte_fac * temp_diff
+            hy_ti(ix,iy,iz) = eq_ti - dti_fac * temp_diff
+          END IF
 
         END DO
       END DO

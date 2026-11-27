@@ -118,7 +118,7 @@ CONTAINS
         IF (use_hybrid_scatter) CALL elastic_scatter
 
         ! Obtain heat capacity to calculate the temperature change in
-        ! hybrid_collisions and ohmic_heating
+        ! hybrid_collisions, ohmic_heating and thermal_equilibration
         CALL get_heat_capacity
 
         ! Calculates ionisational energy loss, and updates grid temperature
@@ -126,12 +126,15 @@ CONTAINS
 
         ! Updates grid temperature due to Ohmic heating
         IF (use_ohmic) CALL ohmic_heating
-        CALL clear_heat_capacity
+
+        ! Pass new temperature values to ghost cells of neighbouring processors
+        CALL field_bc(hy_te, ng)
 
         ! Now that temperature has been fully updated, re-evaluate resistivity
         IF (use_hy_ionisation) CALL update_ionisation
         IF (use_hy_cou_log) CALL update_coulomb_logarithm
         IF (use_ion_temp) CALL thermal_equilibration
+        CALL clear_heat_capacity
         CALL update_resistivity
 
         ! Migrate particle species if they pass the migration criteria
@@ -168,7 +171,7 @@ CONTAINS
     ! constants, to speed up the code
 
     REAL(num) :: max_ne, z_real, iex
-    INTEGER :: ix, iy, iz, i_sol
+    INTEGER :: ix, iy, iz, i_sol, io, iu
     LOGICAL :: sendbuf(2), recvbuf(2)
     INTEGER :: err
 
@@ -176,6 +179,23 @@ CONTAINS
 
       ! Ensure solids have been called with all necessary variables specified
       CALL check_solids
+
+      ! Energy exchange tables are only used by thermal_equilibration, which
+      ! needs an ion temperature. (Nested, as Fortran doesn't short-circuit and
+      ! solid_array isn't allocated if there are no solids)
+      IF (.NOT. use_ion_temp .AND. rank == 0 .AND. solid_count > 0) THEN
+        IF (ANY(solid_array(:)%exchange_model == c_exchange_table)) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = ios_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'energy_exchange_model=table is only used when ', &
+                'the ion temperature is evolved.'
+            WRITE(io,*) 'Set use_ion_temp=T or ion_temperature in the ', &
+                'hybrid block. Code will ignore the energy exchange table.'
+          END DO
+        END IF
+      END IF
 
       ! Initialise variables for extra physics
       IF (use_hybrid_collisions) CALL setup_hy_ionisation_loss

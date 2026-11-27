@@ -742,6 +742,7 @@ MODULE shared_data
     INTEGER :: res_model = c_resist_vacuum
     INTEGER :: ion_model = c_thomas_fermi
     INTEGER :: hc_model = c_hc_davies
+    INTEGER :: exchange_model = c_exchange_spitzer
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
 
     ! A Resistivity lookup table should contain the values of resistivity
@@ -760,6 +761,14 @@ MODULE shared_data
     ! electron temperature by 1 K, for a given mass density [kg/m^3] and
     ! electron temperature [K]. They must be positive values.
     TYPE(lookup_table) :: heat_capacity_table
+
+    ! An Energy Exchange lookup table should contain the electron-ion energy
+    ! exchange rate [W/m^3], the power per unit volume passed between the
+    ! electrons and ions, for a given mass density [kg/m^3], electron
+    ! temperature [K] and ion temperature [K]. Only the magnitude is used, as
+    ! heat always flows from the hotter species to the colder one. Log
+    ! interpolation needs every value to be positive.
+    TYPE(lookup_table) :: exchange_table
 
     ! Derived variables
     REAL(num) :: theta_fac, ln_s, z_prime

@@ -89,6 +89,21 @@ CONTAINS
             CALL abort_code(c_err_io_error)
           END IF
         END IF
+
+        IF(solid_array(isolid)%exchange_model == c_exchange_table) THEN
+          INQUIRE(file=TRIM(solid_array(isolid)%exchange_table%location), &
+              exist=exists)
+          IF (.NOT.exists) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Unable to find the energy exchange table ', '"' &
+                  // TRIM(solid_array(isolid)%exchange_table%location) &
+                  // '"'
+            END DO
+            CALL abort_code(c_err_io_error)
+          END IF
+        END IF
       END IF
     END DO
 
@@ -325,6 +340,60 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'energy_exchange_model') &
+        .OR. str_cmp(element, 'exchange_model')) THEN
+      IF (str_cmp(value, 'spitzer') .OR. str_cmp(value, 'Spitzer')) THEN
+        solid_array(solid_index)%exchange_model = c_exchange_spitzer
+      ELSE IF (str_cmp(value, 'table')) THEN
+        solid_array(solid_index)%exchange_model = c_exchange_table
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) ''
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised energy exchange model: ', TRIM(value)
+            WRITE(io,*) 'Code will use the Spitzer energy exchange model ', &
+                'for this solid'
+            WRITE(io,*) ''
+          END DO
+        END IF
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'energy_exchange_table_location') &
+        .OR. str_cmp(element, 'exchange_table_location')) THEN
+      CALL get_filename(TRIM(ADJUSTL(value)), filename, got_file, errcode)
+      IF (got_file) THEN
+        solid_array(solid_index)%exchange_table%location = filename
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'energy_exchange_table_interpolation') &
+        .OR. str_cmp(element, 'exchange_table_interpolation')) THEN
+      IF (str_cmp(value, 'linear')) THEN
+        solid_array(solid_index)%exchange_table%interpolation = &
+            c_interp_linear
+      ELSE IF (str_cmp(value, 'log')) THEN
+        solid_array(solid_index)%exchange_table%interpolation = &
+            c_interp_log
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) ''
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised ', TRIM(element), ': ', TRIM(value)
+            WRITE(io,*) 'Code will interpolate this table linearly'
+            WRITE(io,*) ''
+          END DO
+        END IF
+      END IF
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'ion_density') &
         .OR. str_cmp(element, 'rho' ) &
         .OR. str_cmp(element, 'ni')) THEN
@@ -449,6 +518,21 @@ CONTAINS
             WRITE(io,*) 'You cannot specify a heat_capacity_table_location ', &
                 'without configuring heat_capacity_model=table in this solid.'
             WRITE(io, *) 'Code will ignore the supplied heat capacity table.'
+          END DO
+        END IF
+      END IF
+
+      IF (solid_array(isolid)%exchange_model /= c_exchange_table .AND. &
+        LEN_TRIM(solid_array(isolid)%exchange_table%location) > 0) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'You cannot specify an ', &
+                'energy_exchange_table_location without configuring ', &
+                'energy_exchange_model=table in this solid.'
+            WRITE(io, *) 'Code will ignore the supplied energy exchange table.'
           END DO
         END IF
       END IF

@@ -264,6 +264,10 @@ MODULE constants
   INTEGER, PARAMETER :: c_hc_davies = 1
   INTEGER, PARAMETER :: c_hc_table = 2
 
+  ! Hybrid electron-ion energy exchange models
+  INTEGER, PARAMETER :: c_exchange_spitzer = 1
+  INTEGER, PARAMETER :: c_exchange_table = 2
+
   ! Hybrid lookup table interpolation methods
   INTEGER, PARAMETER :: c_interp_linear = 1
   INTEGER, PARAMETER :: c_interp_log = 2

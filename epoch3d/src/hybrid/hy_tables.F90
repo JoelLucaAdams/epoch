@@ -52,7 +52,11 @@ CONTAINS
       IF(solid_array(isolid)%hc_model == c_hc_table) &
         CALL load_lookup_table(solid_array(isolid)%heat_capacity_table, &
             default_axes_names(1:2), 'IsochoricSpecificHeatCapacity')
-        
+
+      IF(solid_array(isolid)%exchange_model == c_exchange_table) &
+        CALL load_lookup_table(solid_array(isolid)%exchange_table, &
+            default_axes_names, 'ElectronIonEnergyExchangeRate')
+
     END DO
 
   END SUBROUTINE setup_lookup_tables
